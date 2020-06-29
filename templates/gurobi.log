@@ -1,0 +1,308 @@
+
+Gurobi 8.1.1 (win64, Python) logging started 06/27/20 20:57:52
+
+Academic license - for non-commercial use only
+Read LP format model from file c:\users\meiye'~1\appdata\local\temp\tmpf6kysq.pyomo.lp
+Reading time = 7.64 seconds
+x82945: 69121 rows, 82945 columns, 96769 nonzeros
+Optimize a model with 69121 rows, 82945 columns and 96769 nonzeros
+Model has 41472 quadratic objective terms
+Model has 55392 quadratic constraints
+Variable types: 41473 continuous, 41472 integer (41472 binary)
+Coefficient statistics:
+  Matrix range     [1e+00, 1e+00]
+  QMatrix range    [1e+00, 1e+00]
+  Objective range  [0e+00, 0e+00]
+  QObjective range [6e+00, 7e+00]
+  Bounds range     [1e+00, 1e+00]
+  RHS range        [1e+00, 7e+03]
+  QRHS range       [3e+01, 3e+05]
+Presolve removed 56492 rows and 6407 columns
+Presolve time: 2.35s
+
+Explored 0 nodes (0 simplex iterations) in 2.44 seconds
+Thread count was 1 (of 8 available processors)
+
+Solution count 0
+
+Best objective -, best bound -, gap -
+
+Gurobi 8.1.1 (win64, Python) logging started 06/27/20 22:33:09
+
+Academic license - for non-commercial use only
+Read LP format model from file c:\users\meiye'~1\appdata\local\temp\tmp944cqf.pyomo.lp
+Reading time = 6.91 seconds
+x82945: 13825 rows, 82945 columns, 41473 nonzeros
+Optimize a model with 13825 rows, 82945 columns and 41473 nonzeros
+Model has 41472 quadratic objective terms
+Model has 55392 quadratic constraints
+Variable types: 41473 continuous, 41472 integer (41472 binary)
+Coefficient statistics:
+  Matrix range     [1e+00, 1e+00]
+  QMatrix range    [1e+00, 1e+00]
+  Objective range  [0e+00, 0e+00]
+  QObjective range [6e+00, 7e+00]
+  Bounds range     [1e+00, 1e+00]
+  RHS range        [1e+00, 1e+00]
+  QRHS range       [4e+02, 2e+05]
+Presolve removed 1 rows and 1 columns
+Presolve time: 2.86s
+
+Explored 0 nodes (0 simplex iterations) in 2.97 seconds
+Thread count was 1 (of 8 available processors)
+
+Solution count 0
+
+Best objective -, best bound -, gap -
+
+Gurobi 8.1.1 (win64, Python) logging started 06/27/20 22:49:38
+
+Academic license - for non-commercial use only
+Read LP format model from file c:\users\meiye'~1\appdata\local\temp\tmp30rubu.pyomo.lp
+Reading time = 11.65 seconds
+x82945: 13825 rows, 82945 columns, 41473 nonzeros
+Optimize a model with 13825 rows, 82945 columns and 41473 nonzeros
+Model has 41472 quadratic objective terms
+Model has 55392 quadratic constraints
+Variable types: 41473 continuous, 41472 integer (41472 binary)
+Coefficient statistics:
+  Matrix range     [1e+00, 1e+00]
+  QMatrix range    [1e+00, 1e+00]
+  Objective range  [0e+00, 0e+00]
+  QObjective range [6e+00, 7e+00]
+  Bounds range     [1e+00, 1e+00]
+  RHS range        [1e+00, 1e+00]
+  QRHS range       [4e+02, 2e+05]
+Presolve removed 1 rows and 1 columns
+Presolve time: 2.88s
+
+Explored 0 nodes (0 simplex iterations) in 2.98 seconds
+Thread count was 1 (of 8 available processors)
+
+Solution count 0
+
+Best objective -, best bound -, gap -
+
+Gurobi 8.1.1 (win64, Python) logging started 06/28/20 21:30:21
+
+Academic license - for non-commercial use only
+Read LP format model from file c:\users\meiye'~1\appdata\local\temp\tmpw5i6mx.pyomo.lp
+Reading time = 7.09 seconds
+x82945: 13825 rows, 82945 columns, 27649 nonzeros
+Optimize a model with 13825 rows, 82945 columns and 27649 nonzeros
+Model has 55296 quadratic objective terms
+Model has 55392 quadratic constraints
+Variable types: 55297 continuous, 27648 integer (27648 binary)
+Coefficient statistics:
+  Matrix range     [1e+00, 1e+00]
+  QMatrix range    [1e+00, 1e+00]
+  Objective range  [0e+00, 0e+00]
+  QObjective range [6e+00, 7e+00]
+  Bounds range     [1e+00, 1e+00]
+  RHS range        [1e+00, 1e+00]
+  QRHS range       [1e+02, 3e+05]
+Presolve removed 1 rows and 1 columns
+Presolve time: 2.23s
+
+Explored 0 nodes (0 simplex iterations) in 2.42 seconds
+Thread count was 1 (of 8 available processors)
+
+Solution count 0
+
+Best objective -, best bound -, gap -
+
+Gurobi 8.1.1 (win64, Python) logging started 06/28/20 22:18:13
+
+Academic license - for non-commercial use only
+Read LP format model from file c:\users\meiye'~1\appdata\local\temp\tmpkajc3s.pyomo.lp
+Reading time = 9.70 seconds
+x82081: 13681 rows, 82081 columns, 41041 nonzeros
+Optimize a model with 13681 rows, 82081 columns and 41041 nonzeros
+Model has 41040 quadratic objective terms
+Model has 54815 quadratic constraints
+Variable types: 41041 continuous, 41040 integer (41040 binary)
+Coefficient statistics:
+  Matrix range     [1e+00, 1e+00]
+  QMatrix range    [1e+00, 1e+00]
+  Objective range  [0e+00, 0e+00]
+  QObjective range [6e+00, 7e+00]
+  Bounds range     [1e+00, 1e+00]
+  RHS range        [1e+00, 1e+00]
+  QRHS range       [9e+01, 3e+05]
+Presolve removed 1 rows and 1 columns
+Presolve time: 3.07s
+
+Explored 0 nodes (0 simplex iterations) in 3.31 seconds
+Thread count was 1 (of 8 available processors)
+
+Solution count 0
+
+Best objective -, best bound -, gap -
+
+Gurobi 8.1.1 (win64, Python) logging started 06/28/20 22:27:37
+
+Academic license - for non-commercial use only
+Read LP format model from file c:\users\meiye'~1\appdata\local\temp\tmph7gxhh.pyomo.lp
+Reading time = 8.38 seconds
+x82945: 41473 rows, 82945 columns, 69121 nonzeros
+Optimize a model with 41473 rows, 82945 columns and 69121 nonzeros
+Model has 41472 quadratic objective terms
+Model has 27744 quadratic constraints
+Variable types: 41473 continuous, 41472 integer (41472 binary)
+Coefficient statistics:
+  Matrix range     [1e+00, 1e+00]
+  QMatrix range    [1e+00, 1e+00]
+  Objective range  [0e+00, 0e+00]
+  QObjective range [6e+00, 7e+00]
+  Bounds range     [1e+00, 1e+00]
+  RHS range        [1e+00, 7e+03]
+  QRHS range       [1e+02, 2e+05]
+Presolve removed 27649 rows and 3248 columns
+Presolve time: 2.34s
+
+Explored 0 nodes (0 simplex iterations) in 2.43 seconds
+Thread count was 1 (of 8 available processors)
+
+Solution count 0
+
+Best objective -, best bound -, gap -
+
+Gurobi 8.1.1 (win64, Python) logging started 06/28/20 22:35:45
+
+Academic license - for non-commercial use only
+Read LP format model from file c:\users\meiye'~1\appdata\local\temp\tmpfmp3ut.pyomo.lp
+Reading time = 9.21 seconds
+x82081: 41041 rows, 82081 columns, 68401 nonzeros
+Optimize a model with 41041 rows, 82081 columns and 68401 nonzeros
+Model has 41040 quadratic objective terms
+Model has 27455 quadratic constraints
+Variable types: 41041 continuous, 41040 integer (41040 binary)
+Coefficient statistics:
+  Matrix range     [1e+00, 1e+00]
+  QMatrix range    [1e+00, 1e+00]
+  Objective range  [0e+00, 0e+00]
+  QObjective range [6e+00, 7e+00]
+  Bounds range     [1e+00, 1e+00]
+  RHS range        [1e+00, 7e+03]
+  QRHS range       [1e+02, 3e+05]
+Presolve removed 27361 rows and 3100 columns
+Presolve time: 5.10s
+
+Explored 0 nodes (0 simplex iterations) in 5.26 seconds
+Thread count was 1 (of 8 available processors)
+
+Solution count 0
+
+Best objective -, best bound -, gap -
+
+Gurobi 8.1.1 (win64, Python) logging started 06/28/20 22:44:46
+
+Academic license - for non-commercial use only
+Read LP format model from file c:\users\meiye'~1\appdata\local\temp\tmpnd8iew.pyomo.lp
+Reading time = 9.73 seconds
+x82081: 41041 rows, 82081 columns, 68401 nonzeros
+Optimize a model with 41041 rows, 82081 columns and 68401 nonzeros
+Model has 41040 quadratic objective terms
+Model has 27455 quadratic constraints
+Variable types: 41041 continuous, 41040 integer (41040 binary)
+Coefficient statistics:
+  Matrix range     [1e+00, 1e+00]
+  QMatrix range    [1e+00, 1e+00]
+  Objective range  [0e+00, 0e+00]
+  QObjective range [6e+00, 7e+00]
+  Bounds range     [1e+00, 1e+00]
+  RHS range        [1e+00, 7e+03]
+  QRHS range       [1e+02, 3e+05]
+Presolve removed 27361 rows and 3190 columns
+Presolve time: 3.57s
+
+Explored 0 nodes (0 simplex iterations) in 3.71 seconds
+Thread count was 1 (of 8 available processors)
+
+Solution count 0
+
+Best objective -, best bound -, gap -
+
+Gurobi 8.1.1 (win64, Python) logging started 06/29/20 09:21:19
+
+Academic license - for non-commercial use only
+Read LP format model from file c:\users\meiye'~1\appdata\local\temp\tmpm2cm2w.pyomo.lp
+Reading time = 6.14 seconds
+x82081: 41041 rows, 82081 columns, 68401 nonzeros
+Optimize a model with 41041 rows, 82081 columns and 68401 nonzeros
+Model has 41040 quadratic objective terms
+Model has 27455 quadratic constraints
+Variable types: 41041 continuous, 41040 integer (41040 binary)
+Coefficient statistics:
+  Matrix range     [1e+00, 1e+00]
+  QMatrix range    [1e+00, 1e+00]
+  Objective range  [0e+00, 0e+00]
+  QObjective range [6e+00, 7e+00]
+  Bounds range     [1e+00, 1e+00]
+  RHS range        [1e+00, 7e+03]
+  QRHS range       [1e+02, 2e+05]
+Presolve removed 27361 rows and 3122 columns
+Presolve time: 2.34s
+
+Explored 0 nodes (0 simplex iterations) in 2.42 seconds
+Thread count was 1 (of 8 available processors)
+
+Solution count 0
+
+Best objective -, best bound -, gap -
+
+Gurobi 8.1.1 (win64, Python) logging started 06/29/20 09:46:11
+
+Academic license - for non-commercial use only
+Read LP format model from file c:\users\meiye'~1\appdata\local\temp\tmpb_agkg.pyomo.lp
+Reading time = 6.02 seconds
+x82081: 41041 rows, 82081 columns, 68401 nonzeros
+Optimize a model with 41041 rows, 82081 columns and 68401 nonzeros
+Model has 41040 quadratic objective terms
+Model has 27455 quadratic constraints
+Variable types: 41041 continuous, 41040 integer (41040 binary)
+Coefficient statistics:
+  Matrix range     [1e+00, 1e+00]
+  QMatrix range    [1e+00, 1e+00]
+  Objective range  [0e+00, 0e+00]
+  QObjective range [6e+00, 7e+00]
+  Bounds range     [1e+00, 1e+00]
+  RHS range        [1e+00, 7e+03]
+  QRHS range       [1e+02, 3e+05]
+Presolve removed 27361 rows and 3121 columns
+Presolve time: 1.91s
+
+Explored 0 nodes (0 simplex iterations) in 2.00 seconds
+Thread count was 1 (of 8 available processors)
+
+Solution count 0
+
+Best objective -, best bound -, gap -
+
+Gurobi 8.1.1 (win64, Python) logging started 06/29/20 09:55:30
+
+Academic license - for non-commercial use only
+Read LP format model from file c:\users\meiye'~1\appdata\local\temp\tmp5hnjlc.pyomo.lp
+Reading time = 5.45 seconds
+x82945: 41473 rows, 82945 columns, 69121 nonzeros
+Optimize a model with 41473 rows, 82945 columns and 69121 nonzeros
+Model has 41472 quadratic objective terms
+Model has 27744 quadratic constraints
+Variable types: 41473 continuous, 41472 integer (41472 binary)
+Coefficient statistics:
+  Matrix range     [1e+00, 1e+00]
+  QMatrix range    [1e+00, 1e+00]
+  Objective range  [0e+00, 0e+00]
+  QObjective range [6e+00, 7e+00]
+  Bounds range     [1e+00, 1e+00]
+  RHS range        [1e+00, 7e+03]
+  QRHS range       [1e+02, 3e+05]
+Presolve removed 27649 rows and 3224 columns
+Presolve time: 1.65s
+
+Explored 0 nodes (0 simplex iterations) in 1.72 seconds
+Thread count was 1 (of 8 available processors)
+
+Solution count 0
+
+Best objective -, best bound -, gap -
