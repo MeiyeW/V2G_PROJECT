@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import TryOptimization
 
 price_curr = [p1_curr, p2_curr, p3_curr]
 price_prev = [p1_prev, p2_prev, p3_prev]

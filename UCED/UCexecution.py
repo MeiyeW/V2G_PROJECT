@@ -13,7 +13,7 @@ run_no = 1
 from UCModel import model
 
 ###Segment C.3
-instance = model.create_instance('test.dat')
+instance = model.create_instance('test2.dat')
 
 ###Segment C.4
 opt = SolverFactory("gurobi") ##SolverFactory("cplex")
@@ -76,7 +76,7 @@ for day in range(start,end):
         #         if int(index[1]>0 and index[1]<25):
         #             nse.append((index[0],day,index[1]+((day-1)*24),varobject[index].value))
     print(day)
-    print(str(datetime.now()))
+    print(str(datetime.datetime.now()))
     
     regup_pd=pd.DataFrame(regup,columns=('Generator','Day','Hour','Value'))
     regdown_pd=pd.DataFrame(regdown,columns=('Generator','Day','Hour','Value'))  
