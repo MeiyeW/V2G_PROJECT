@@ -76,7 +76,37 @@ class CentralOptimization(object):
         print('')
 
         # Post process results
-        return self.post_process(project, net_load, opti_model, result, plot)
+        return self.post_process(project, net_load, opti_model, result, plot) , self.print_result(project,opti_model,result)
+    
+    def print_result(self,project,model,result):
+
+        power=pandas.DataFrame()
+        
+        discharge = pandas.DataFrame()
+        charge = pandas.DataFrame()
+
+        # Get the result
+
+        u1 = model.u1.get_values()
+
+        ub=model.ub.get_values()
+       
+        c1 = model.c1.get_values()
+        
+        cb=model.cb.get_values()
+        
+        c2=model.c2.get_values()
+        
+        cb2=model.cb2.get_values()
+
+        i = pandas.date_range(start=self.date_from, end=self.date_to,
+                              freq=str(self.optimization_timestep) + 'T', closed='left')
+
+
+        return u1, ub, c1, cb, c2, cb2 ,i
+
+
+
 
     def initialize_net_load(self, net_load, real_number_of_vehicle, project):
         """Make sure that the net load has the right size and scale the net
@@ -209,8 +239,11 @@ class CentralOptimization(object):
         unfeasible_vehicle = 0
         
         temp_price=price.copy()
-        # temp_price=temp_price.resample(str(self.optimization_timestep) + 'T').first()
-        # temp_price=temp_price.set_index(self.times)
+        temp_price=temp_price.iloc[0:len(net_load)]
+        temp_price=temp_price.set_index(net_load.index)
+        temp_price=temp_price.resample(str(self.optimization_timestep) + 'T').first()
+        temp_price=temp_price.set_index(pandas.DataFrame(range(0, len(temp_price)), columns=['index']).index)
+        
 
         # Initialize pr_e 
         self.pr_e.update(temp_price.to_dict()['pr_e'])
@@ -270,11 +303,8 @@ class CentralOptimization(object):
                                                  (SOC_final - SOC_init) * vehicle.car_model.battery_capacity *
                                                  (60 / self.optimization_timestep))})
 
-                
-                
-                
         print('There is ' + str(vehicle_to_optimize) + ' vehicle participating in the optimization (' +
-              str(vehic·le_to_optimize * 100 / len(project.vehicles)) + '%)')
+              str(vehicle_to_optimize * 100 / len(project.vehicles)) + '%)')
         print('There is ' + str(unfeasible_vehicle) + ' unfeasible vehicle.')
         print('')
 
@@ -341,56 +371,98 @@ class CentralOptimization(object):
             model.e_final = Param(model.v, initialize=efinal, doc='final energy balance')
 
             # Time_index
-            model.time_index = Param(initialize=1/60, doc='time index conversion to 1 hr')
+            model.time_index = Param(initialize=1/6, doc='time index conversion to 1 hr')
             
             # Regulation Energy Ratio* price ratio from capacity to energy
             model.re_energy_u = Param(initialize=0.25, doc='regulation energy ratio to capacity')
             model.re_energy_d = Param(initialize=0.2, doc='regulation energy ratio to capacity')
 
-            # model.beta = Param(initialize=beta, doc='beta')
+           
+            # ###### Variable           
+            model.u1= Var(model.t, model.v,  doc='Power used for energy discharging')
+            model.ub= Var(model.t, model.v,  within=Binary,doc='Power used for energy discharging')
+            model.c1= Var(model.t, model.v,  within=NonNegativeReals, doc='Power capacity used for regulation up')
+            model.c2= Var(model.t, model.v,  within=NonNegativeReals,doc='Power capacity u sed for regulation down')
+            model.cb= Var(model.t, model.v,  within=Binary,doc='Power used for energy charging')
+            model.cb2= Var(model.t, model.v, within=Binary,doc='Power used for energy charging')
 
-            # ###### Variable
-            model.u = Var(model.t, model.v, domain=Integers, doc='Power used')
-            model.u1= Var(model.t, model.v, domain=Integers, doc='Power used for energy')
-            model.c1= Var(model.t, model.v, domain=Integers, within=NonNegativeReals, doc='Power capacity used for regulation up')
-            model.c2= Var(model.t, model.v, domain=Integers,  within=NonNegativeReals,doc='Power capacity used for regulation down')
 
             # ###### Rules
-            def power_rule(model, t, v):
-                return model.u1[t, v] +model.c1[t,v]*model.re_energy_u-model.c2[t,v]*model.re_energy_d= model.u[t, v]
-            model.power_rule = Constraint(model.t, model.v, rule=maximum_rule, doc='P rule')
-            
-            def maximum_power_rule(model, t, v):
-                return model.u[t, v] <= model.p_max[t, v]
-            model.power_max_rule = Constraint(model.t, model.v, rule=maximum_power_rule, doc='P max rule')
+            # def power_rule(model, t, v):
+            #     return model.u1[t, v]*model.ub[t,v] +model.u2[t, v]*model.ub2[t,v] + model.c1[t,v]*model.cb[t,v] - model.c2[t,v]*model.cb2[t,v]<= model.u[t, v]
+            # model.power_rule = Constraint(model.t, model.v, rule=power_rule, doc='P rule')
 
-            def minimum_power_rule(model, t, v):
-                return model.u[t, v] >= model.p_min[t, v]
-            model.power_min_rule = Constraint(model.t, model.v, rule=minimum_power_rule, doc='P min rule')
+            def binary_rule(model, t, v):
+                return model.ub[t,v] +model.cb[t,v] +model.cb2[t,v]<= 1
+            model.binary_rule = Constraint(model.t, model.v, rule=binary_rule, doc='Binary rule')
+            
+            def maximum_power_rule1(model, t, v):
+                return model.u1[t, v]<= model.p_max[t, v]
+            model.power_max_rule1 = Constraint(model.t, model.v, rule=maximum_power_rule1, doc='P max rule')
+
+            def minimum_power_rule1(model, t, v):
+                return model.u1[t, v] >= model.p_min[t, v]
+            model.power_min_rule1 = Constraint(model.t, model.v, rule=minimum_power_rule1, doc='P min rule')
+         
+            def maximum_power_rule2(model, t, v):
+                return model.c2[t, v] <= model.p_max[t, v]
+            model.power_max_rule2 = Constraint(model.t, model.v, rule=maximum_power_rule2, doc='P max rule')
+
+            def minimum_power_rule2(model, t, v):
+                return model.c2[t, v] >= model.p_min[t, v]
+            model.power_min_rule2 = Constraint(model.t, model.v, rule=minimum_power_rule2, doc='P min rule')
+
+            def maximum_power_rule3(model, t, v):
+                return model.c1[t, v] <= model.p_max[t, v]
+            model.power_max_rule3 = Constraint(model.t, model.v, rule=maximum_power_rule3, doc='P max rule')
+
+            def minimum_power_rule3(model, t, v):
+                return model.c1[t, v] >= model.p_min[t, v]
+            model.power_min_rule3 = Constraint(model.t, model.v, rule=minimum_power_rule3, doc='P min rule')
 
             def minimum_energy_rule(model, t, v):
-                return sum(model.u[i, v] for i in range(0, t + 1)) >= model.e_min[t, v]
+                return sum(model.u1[i, v]*model.ub[i,v] + model.c1[i,v]*model.cb[i,v] - model.c2[i,v]*model.cb2[i,v] for i in range(0, t + 1)) >= model.e_min[t, v]
             model.minimum_energy_rule = Constraint(model.t, model.v, rule=minimum_energy_rule, doc='E min rule')
 
             def maximum_energy_rule(model, t, v):
-                return sum(model.u[i, v] for i in range(0, t + 1)) <= model.e_max[t, v]
+                return sum(model.u1[i, v]*model.ub[i,v] + model.c1[i,v]*model.cb[i,v] - model.c2[i,v]*model.cb2[i,v] for i in range(0, t + 1)) <= model.e_max[t, v]
             model.maximum_energy_rule = Constraint(model.t, model.v, rule=maximum_energy_rule, doc='E max rule')
 
             def final_energy_balance(model, v):
-                return sum(model.u[i, v] for i in model.t) >= model.e_final[v]
+                return sum(model.u1[i, v]*model.ub[i,v] + model.c1[i,v]*model.cb[i,v] - model.c2[i,v]*model.cb2[i,v] for i in model.t) >= model.e_final[v]
             model.final_energy_rule = Constraint(model.v, rule=final_energy_balance, doc='E final rule')
 
             # Set the objective to be either peak shaving or ramp mitigation
             # still have to deal with time step(model.time_index, for example,15/60mins) and battery price
             if peak_shaving == 'economic':
                 def objective_rule(model):
-                    return -sum(sum([model.u1[t, v]*model.pr_e[t]*model.time_index for v in model.v])
-                    +sum([model.c1[t, v]*model.pr_fre_c1[t]*model.time_index for v in model.v])
-                    +sum([model.c2[t, v]*model.pr_fre_c2[t]*model.time_index for v in model.v])
-                    +sum([model.c1[t, v]*model.re_energy_u*model.pr_fre_c1[t]*model.time_index for v in model.v])
-                    +sum([model.c2[t, v]*model.re_energy_d*model.pr_fre_c2[t]*model.time_index for v in model.v])
-                    -sum(abs([model.u[t, v])*0.1*model.time_index for v in model.v]) for t in model.t]) #model.pr_ba
+                    return sum( [
+                    -sum([model.u1[t, v]*model.ub[t,v]*model.pr_e[t]*model.time_index for v in model.v])
+                    +sum([model.c1[t, v]*model.cb[t,v]*model.pr_fre_c1[t]*model.time_index for v in model.v])
+                    +sum([model.c2[t, v]*model.cb2[t,v]*model.pr_fre_c2[t]*model.time_index for v in model.v])
+                    +sum([model.c1[t, v]*model.cb[t,v]*model.re_energy_u*model.pr_fre_c1[t]*model.time_index for v in model.v])
+                    +sum([model.c2[t, v]*model.cb2[t,v]*model.re_energy_d*model.pr_fre_c2[t]*model.time_index for v in model.v])
+                    -sum([model.u1[t, v]*model.ub[t,v]*0.1*model.time_index for v in model.v])   
+                    -sum([model.c1[t, v]*model.cb[t,v]*0.1*model.time_index for v in model.v])
+                    -sum([model.c2[t, v]*model.cb2[t,v]*0.1*model.time_index for v in model.v])
+                    for t in model.t] )
+                    #model.pr_ba
                 model.objective = Objective(rule=objective_rule, sense=maximize, doc='Define objective function')
+            
+            # if peak_shaving == 'economic':
+            #     def objective_rule(model):
+            #         return sum( [
+            #         +sum([model.u1[t, v]*model.ub[t,v]*model.pr_e[t]*model.time_index for v in model.v])                    
+            #         +sum([model.c1[t, v]*model.cb[t,v]*(1-model.ub[t,v])*model.pr_fre_c1[t]*model.time_index for v in model.v])
+            #         +sum([model.c2[t, v]*(1-model.cb[t,v])*(1-model.ub[t,v])*model.pr_fre_c2[t]*model.time_index for v in model.v])
+            #         +sum([model.c1[t, v]*model.cb[t,v]*(1-model.ub[t,v])*model.re_energy_u*model.pr_fre_c1[t]*model.time_index for v in model.v])
+            #         +sum([model.c2[t, v]*(1-model.cb[t,v])*(1-model.ub[t,v])*model.re_energy_d*model.pr_fre_c2[t]*model.time_index for v in model.v])
+            #         -sum([model.u1[t, v]*model.ub[t,v]*0.1*model.time_index for v in model.v])                    
+            #         -sum([model.c1[t, v]*model.cb[t,v]*(1-model.ub[t,v])*0.1*model.time_index for v in model.v])
+            #         -sum([model.c2[t, v]*(1-model.cb[t,v])*(1-model.ub[t,v])*0.1*model.time_index for v in model.v])
+            #         for t in model.t] )
+            #         #model.pr_ba
+            #     model.objective = Objective(rule=objective_rule, sense=maximize, doc='Define objective function')
             
             elif peak_shaving == 'peak_shaving':
                 def objective_rule(model):
@@ -399,7 +471,7 @@ class CentralOptimization(object):
 
             elif peak_shaving == 'penalized_peak_shaving':
                 def objective_rule(model):
-                    return (sum([(model.d[t] + sum([model.u[t, v] for v in model.v]))**2 for t in model.t]) +
+                    return (sum( [(model.d[t] + sum([model.u[t, v] for v in model.v]))**2 for t in model.t]) +
                             penalization * sum([sum([model.u[t, v]**2 for v in model.v]) for t in model.t]))
                 model.objective = Objective(rule=objective_rule, sense=minimize, doc='Define objective function')
 
@@ -408,7 +480,7 @@ class CentralOptimization(object):
                     return sum([(model.d[t + 1] - model.d[t] + sum([model.u[t + 1, v] - model.u[t, v] for v in model.v]))**2 for t in model.t if t != last_t])
                 model.objective = Objective(rule=objective_rule, sense=minimize, doc='Define objective function')
 
-            results = opt.solve(model)
+            results = opt.solve(model,tee=True, keepfiles=True)
             # results.write()
 
         return model, results
@@ -422,9 +494,48 @@ class CentralOptimization(object):
         sns.despine()
 
         result = pandas.DataFrame()
+        powerresult = pandas.DataFrame()
+        discharge = pandas.DataFrame()
+        charge = pandas.DataFrame()
 
         # Get the result
-        df = pandas.DataFrame(index=['power'], data=model.u.get_values()).transpose().groupby(level=0).sum()
+
+        df = pandas.DataFrame(index=['power'], data=model.u1.get_values()).transpose()
+        for i in range(len(df)):
+            if df[i]>0:
+                discharge.append(df[i])
+            else:
+                charge.append(-df[i])       
+
+        df = pandas.DataFrame(index=['power discharged'], data=discharge).groupby(level=0).sum()
+        powerresult = pandas.concat([powerresult, df], axis=1)
+
+        df = pandas.DataFrame(index=['power charged'], data=charge).groupby(level=0).sum()
+        powerresult = pandas.concat([powerresult, df], axis=1)
+
+        df = pandas.DataFrame(index=['power discharged binary'], data=model.ub.get_values()).transpose().groupby(level=0).sum()
+        powerresult = pandas.concat([powerresult, df], axis=1)
+       
+        df = pandas.DataFrame(index=['power regulation up'], data=model.c1.get_values()).transpose().groupby(level=0).sum()
+        powerresult = pandas.concat([powerresult, df], axis=1)
+        df = pandas.DataFrame(index=['power regulation up binary'], data=model.cb.get_values()).transpose().groupby(level=0).sum()
+        powerresult = pandas.concat([powerresult, df], axis=1)
+        
+        df = pandas.DataFrame(index=['power regulation down'], data=model.c2.get_values()).transpose().groupby(level=0).sum()
+        powerresult = pandas.concat([powerresult, df], axis=1)
+        df = pandas.DataFrame(index=['power regulation down binary'], data=model.cb2.get_values()).transpose().groupby(level=0).sum()
+        powerresult = pandas.concat([powerresult, df], axis=1)
+
+        for i in range(len(df)):           
+            dischar[i]=powerresult[i]['power discharged']*powerresult[i]['power discharged binary']
+            char[i]=-powerresult[i]['power charged']*powerresult[i]['power discharged binary']
+            regup[i]=powerresult[i]['power regulation up']*powerresult[i]['power regulation up binary']            
+            regdown[i]=powerresult[i]['power regulation down']*powerresult[i]['power regulation down binary']
+            powersum[i]=dischar[i]+char[i]+regup[i]+regdown[i]
+            powerresult.append((dischar[i],char[i],regup[i],regdown[i],powersum[i]))
+        
+        df=pandas.DataFrame(index=['power'], data=powerresult['powersum'])
+
         # Ramp of the result
         mylist = [0]
         mylist.extend(list(numpy.diff(df['power'].values)))
@@ -434,7 +545,7 @@ class CentralOptimization(object):
         df = pandas.DataFrame(
             pandas.DataFrame(
                 index=['anything'],
-                data=model.u.get_values()).transpose().unstack().cumsum().sum(axis=1), columns=['powercum']) * (5 / 60)
+                data=powerresult['powersum']), columns=['powercum']) * (5 / 60)
         result = pandas.concat([result, df], axis=1)
 
         # Get pmax and pmin units of power [W]
@@ -487,6 +598,11 @@ class CentralOptimization(object):
         plt.legend(loc=0)
         plt.show()
 
+        return powerresult
+
+
+
+
     def post_process(self, project, netload, model, result, plot):
         """Recompute SOC profiles and compute new total power demand
 
@@ -495,6 +611,7 @@ class CentralOptimization(object):
 
         Note: Should check that 'vehicle before' and 'after' contain the same number of vehicles
         """
+
         if plot:
             self.plot_result(model)
 
@@ -508,7 +625,7 @@ class CentralOptimization(object):
                 else:
                     temp['vehicle_before'] += vehicle.result['power_demand']
 
-        temp2 = pandas.DataFrame(index=['vehicle_after'], data=model.u.get_values()).transpose().groupby(level=0).sum()
+        temp2 = pandas.DataFrame(index=['vehicle_after'], data=model.u1.get_values()).transpose().groupby(level=0).sum()
         i = pandas.date_range(start=self.date_from, end=self.date_to,
                               freq=str(self.optimization_timestep) + 'T', closed='left')
         temp2 = temp2.set_index(i)
@@ -520,6 +637,102 @@ class CentralOptimization(object):
         final_result = final_result.fillna(method='ffill').fillna(method='bfill')
 
         return final_result
+
+        # if plot:
+        #     self.plot_result(model)
+
+        # temp = pandas.DataFrame() 
+        # first = True
+
+        # power=pandas.DataFrame()
+        
+        # discharge = pandas.DataFrame()
+        # charge = pandas.DataFrame()
+
+        # # Get the result
+
+        # df = pandas.DataFrame(index=['power'], data=model.u1.get_values()).transpose()
+
+        # for i in range(len(df)):
+        #     if df.iloc[[i],[0]].values[0][0]>=0:
+        #         discharge=pandas.concat([discharge,df.iloc[[i],[0]]],axis=0)
+        #     else:
+        #         charge=pandas.concat([charge,-df.iloc[[i],[0]]],axis=0) 
+
+        # df = pandas.DataFrame(index=['power discharged'], data=discharge.transpose().get_values()).transpose().groupby(level=0).sum()
+        # power = pandas.concat([power, df], axis=1)
+
+        # df = pandas.DataFrame(index=['power charged'], data=charge.transpose().get_values()).transpose().groupby(level=0).sum()
+        # power = pandas.concat([power, df], axis=1)
+
+        # df = pandas.DataFrame(index=['power discharged binary'], data=model.ub.get_values()).transpose().groupby(level=0).sum()
+        # power = pandas.concat([power, df], axis=1)
+       
+        # df = pandas.DataFrame(index=['power regulation up'], data=model.c1.get_values()).transpose().groupby(level=0).sum()
+        # power = pandas.concat([power, df], axis=1)
+        # df = pandas.DataFrame(index=['power regulation up binary'], data=model.cb.get_values()).transpose().groupby(level=0).sum()
+        # power = pandas.concat([power, df], axis=1)
+        
+        # df = pandas.DataFrame(index=['power regulation down'], data=model.c2.get_values()).transpose().groupby(level=0).sum()
+        # power = pandas.concat([power, df], axis=1)
+        # df = pandas.DataFrame(index=['power regulation down binary'], data=model.cb2.get_values()).transpose().groupby(level=0).sum()
+        # power = pandas.concat([power, df], axis=1)
+
+        
+        # powerresult =[]
+
+        # dischar=[]
+        # char=[]
+        # regup=[]
+        # regdown=[]
+        # powersum=[]
+
+        # for i in range(len(df)):           
+        #     dischar.append(power.loc[[i],'power discharged']*power.loc[[i],'power discharged binary'])
+        #     char.append(power.loc[[i],'power charged']*power.loc[[i],'power discharged binary'])
+        #     regup.append(power.loc[[i],'power regulation up']*power.loc[[i],'power regulation up binary'])
+        #     regdown.append(power.loc[[i],'power regulation down']*power.loc[[i],'power regulation down binary'])
+        #     powersum.append(dischar[i]-char[i])
+        #     powerresult.append((dischar[i],char[i],regup[i],regdown[i],powersum[i]))
+        
+        # powerresult_pd=pandas.DataFrame(powerresult,columns=('Discharge','Charge','Regup','Regdown','EnergySum'))
+        
+        
+        # for vehicle in project.vehicles:
+        #     if vehicle.result is not None:
+        #         if first:
+        #             temp['vehicle_before'] = vehicle.result['power_demand']
+        #             first = False
+        #         else:
+        #             temp['vehicle_before'] += vehicle.result['power_demand']
+
+        # temp2 = pandas.DataFrame(index=['vehicle_after'], data=powerresult_pd['EnergySum'])
+        # i = pandas.date_range(start=self.date_from, end=self.date_to,
+        #                       freq=str(self.optimization_timestep) + 'T', closed='left')
+
+        # temp2 = temp2.set_index(i)
+        # temp2 = temp2.resample(str(project.timestep) + 'S')
+        # temp2 = temp2.fillna(method='ffill').fillna(method='bfill')
+
+        # temp3 = pandas.DataFrame(index=['vehicle_after_demand'], data=powerresult_pd['Charge'])
+        # i = pandas.date_range(start=self.date_from, end=self.date_to,
+        #                       freq=str(self.optimization_timestep) + 'T', closed='left')
+        # temp3 = temp3.set_index(i)
+        # temp3 = temp3.resample(str(project.timestep) + 'S')
+        # temp3 = temp3.fillna(method='ffill').fillna(method='bfill')
+
+        # temp4 = pandas.DataFrame(index=['vehicle_after_generation'], data=powerresult_pd['Discharge'])
+        # i = pandas.date_range(start=self.date_from, end=self.date_to,
+        #                       freq=str(self.optimization_timestep) + 'T', closed='left')
+        # temp4 = temp4.set_index(i)
+        # temp4 = temp4.resample(str(project.timestep) + 'S')
+        # temp4 = temp4.fillna(method='ffill').fillna(method='bfill')
+
+        # final_result = pandas.DataFrame()
+        # final_result = pandas.concat([temp['vehicle_before'], temp2['vehicle_after']],temp3['vehicle_after_demand'],temp4['vehicle_after_generatio'],axis=1)
+        # final_result = final_result.fillna(method='ffill').fillna(method='bfill')
+
+        # return final_result
 
 
 def save_vehicle_state_for_optimization(vehicle, timestep, date_from,

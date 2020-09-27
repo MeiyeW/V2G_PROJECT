@@ -20,10 +20,10 @@ regdown_margin = 0.50 ##minimum regulation down reserve as a percent of total re
 data_name = 'test2'
 #read parameters for dispatchable generators  
 df_gen = pd.read_csv('../data/generator/Generators.csv',header=0)
-df_wind_cap=pd.read_csv('../data/generator/WindCap.csv',header=0)
-df_solar_cap=pd.read_csv('../data/generator/SolarCap.csv',header=0)
+df_windsolar_cap=pd.read_csv('../data/generator/SolarWindCap.csv',header=0)
 df_windsolar_cons=pd.read_csv('../data/generator/WindSolarConstraint.csv',header=0)
-df_vehicle=pd.read_csv('../data/netload/Vehicle.csv',header=0)
+df_veh_cap=pd.read_csv('../data/vehicle/VehicleCap.csv',header=0)
+# df_veh_con=pd.read_csv('../data/netload/VehicleConstraint.csv',header=0)
 
 #read parameters for net load
 df_load = pd.read_csv('../data/netload/CAISO1819.csv',header=0)
@@ -45,7 +45,7 @@ with open(''+str(data_name)+'.dat', 'w') as f:
 
 # wind solar set  
 
-f.write('set WindSolar :=\n')
+    f.write('set WindSolar :=\n')
     for gen in range(0,len(df_windsolar_cons)):
         unit_name = df_windsolar_cons.loc[gen,'name']
         unit_name = unit_name.replace(' ','_')
@@ -105,6 +105,11 @@ f.write('set WindSolar :=\n')
         f.write('\n')
     f.write(';\n\n') 
 
+# ####### create parameter matrix for vehicles
+#  f.write('param:'+'\t'+'var_veh:='+'\n')
+#     f.write(0.2 + ' ') # var_veh
+#     f.write(';\n\n')
+
 ####### Hourly timeseries (load)
     # load (hourly)
     f.write('param:' + '\t' + 'SimDemand:=' + '\n')      
@@ -113,18 +118,28 @@ f.write('set WindSolar :=\n')
     f.write(';\n\n')
 
 ####### Wind and Solar Cap data ###
-f.write('param:' + '\t' + 'WindCap:=' + '\n')      
-    for h in range(0,len(df_wind_cap)): 
-        f.write(str(h+1) + '\t' + str(df_wind_cap.loc[h,'MW']) + '\n')
-    f.write(';\n\n')
-
-f.write('param:' + '\t' + 'SolarCap:=' + '\n')      
-    for h in range(0,len(df_solar_cap)): 
-        f.write(str(h+1) + '\t' + str(df_solar_cap.loc[h,'MW']) + '\n')
+    f.write('param:' + '\t')
+    for c in df_windsolar_cap.columns:
+        if c != 'name':
+            f.write(c + '\t')
+    f.write(':=\n\n')
+    for i in range(0,len(df_windsolar_cap)):    
+        for c in df_windsolar_cap.columns: 
+            f.write(str(i+1) + '\t' + str(df_windsolar_cap.iloc[i,c]) + '\t')             
+        f.write('\n')
     f.write(';\n\n')
 
 ######## Vehicle Cap data ######
-
+    f.write('param:' + '\t')
+    for c in df_veh_cap.columns:
+        if c != 'name':
+            f.write(c + '\t')
+    f.write(':=\n\n')
+    for i in range(0,len(df_veh_cap)):    
+        for c in df_veh_cap.columns: 
+            f.write(str(i+1) + '\t' + str(df_veh_cap.iloc[i,c]) + '\t')             
+        f.write('\n')
+    f.write(';\n\n')
 
 print ('Complete:',data_name)
 
@@ -205,8 +220,6 @@ model.nse = Var(model.HH_periods, within=NonNegativeReals,initialize=0)
 #####==== Parameters for wind/solar ===####
 #Max capacity
 model.maxcap_ws = Param(model.WindSolar,model.HH_periods)
-#Min capacity
-model.mincap_ws = Param(model.WindSolar,model.HH_periods)
 #operational cost
 model.opcost_ws = Param(model.WindSolar)
 #Variable O&M
@@ -248,7 +261,7 @@ model.nse_ws = Var(model.HH_periods, within=NonNegativeReals,initialize=0)
 model.gen_capacity_veh=Param(model.Vehicle,model.HH_periods)
 model.regup_capacity_veh=Param(model.Vehicle,model.HH_periods)
 model.regdown_capacity_veh=Param(model.Vehicle,model.HH_periods) 
-model.var_veh=Param(model.HH_periods) 
+# model.var_veh=Param(model.HH_periods) 
 
 #####=======================Decision variables for vehicles======================########
 #Vehicle:
@@ -256,22 +269,24 @@ model.mwh_veh=Var(model.Vehicle,model.HH_periods, within=NonNegativeReals,initia
 model.regup_veh=Var(model.Vehicle,model.HH_periods, within=NonNegativeReals,initialize=0)
 model.regdown_veh=Var(model.Vehicle,model.HH_periods, within=NonNegativeReals,initialize=0)
 
-
-def SysCost(model):
+def SysCost(model,j,i):
     operational = sum(model.mwh[j,i]*(model.opcost[j]+model.var_om[j]) for i in model.hh_periods for j in model.Generators)+
     sum(model.mwh_ws[j,i]*(model.opcost[j]+model.var_om_ws[j]) for i in model.hh_periods for j in model.WindSolar)+
-    sum(model.mwh_veh[j,i]*(model.var_veh[j]) for i in model.hh_periods for j in model.Vehicle)
+    # sum(model.mwh_veh[j,i]*(model.var_veh[j]) for i in model.hh_periods for j in model.Vehicle)
+    sum(model.mwh_veh[j,i]*(0.1) for i in model.hh_periods for j in model.Vehicle)
 
     starts = sum(model.st_cost[j]*model.switch[j,i] for i in model.hh_periods for j in model.Generators)+
     sum(model.st_cost_ws[j]*model.switch_ws[j,i] for i in model.hh_periods for j in model.WindSolar)
 
     regulationup_capacity = sum(model.regup[j,i]*model.regcost[j]  for i in model.hh_periods for j in model.Generators)+
     sum(model.regup_ws[j,i]*model.regcost[j] for i in model.hh_periods for j in model.WindSolar)+
-    sum(model.regup_veh[j,i]*(model.var_veh[j]) for i in model.hh_periods for j in model.Vehicle)
+    # sum(model.regup_veh[j,i]*(model.var_veh[j]) for i in model.hh_periods for j in model.Vehicle)
+    sum(model.regup_veh[j,i]*(0.1) for i in model.hh_periods for j in model.Vehicle)
 
     regulationdown_capacity = sum(model.regdown[j,i]*model.regcost[j] for i in model.hh_periods for j in model.Generators)+
     sum(model.regdown_ws[j,i]*model.regcost[j] for i in model.hh_periods for j in model.WindSolar)+
-    sum(model.regdown_veh[j,i]*(model.var_veh[j]) for i in model.hh_periods for j in model.Vehicle) 
+    # sum(model.regdown_veh[j,i]*(model.var_veh[j]) for i in model.hh_periods for j in model.Vehicle)
+    sum(model.regdown_veh[j,i]*(0.1) for i in model.hh_periods for j in model.Vehicle) 
     #0.5 and 0.3 are the scalar factor for unit cost of regulation up and down compared to variable operational cost, can be changed
     nonserved = sum(model.nse[i]*20 for i in model.hh_periods)+
     sum(model.nse_ws[i]*10 for i in model.hh_periods)

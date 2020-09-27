@@ -1,0 +1,3 @@
+﻿name,opcost,minup,ramp,st_cost,var_om,fix_om,regcost
+solar,0.02545466,0,15.37,0,0,27750,9999
+wind,0.02567363,0,50.12,0,0,39550,9999
