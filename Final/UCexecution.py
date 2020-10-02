@@ -12,8 +12,10 @@ run_no = 1
 ###Segment C.2
 from UCModel import model
 
+
+data_name = 'test2'
 ###Segment C.3
-instance = model.create_instance('test.dat')
+instance = model.create_instance(data_name+'.dat')
 
 ###Segment C.4
 opt = SolverFactory("gurobi") ##SolverFactory("cplex")

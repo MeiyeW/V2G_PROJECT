@@ -19,10 +19,13 @@ regdown_margin = 0.50 ##minimum regulation down reserve as a percent of total re
 
 data_name = 'test2'
 #read parameters for dispatchable generators  
-df_gen = pd.read_csv('../data/generator/Generators.csv',header=0)
-df_windsolar_cap=pd.read_csv('../data/generator/SolarWindCap.csv',header=0)
-df_windsolar_cons=pd.read_csv('../data/generator/WindSolarConstraint.csv',header=0)
-df_veh_cap=pd.read_csv('../data/vehicle/VehicleCap.csv',header=0)
+df_gen = pd.read_csv('../data/generator/Generator.csv',header=0)
+df_solar_cap=pd.read_csv('../data/generator/SolarCap.csv',header=0)
+df_solar_cons=pd.read_csv('../data/generator/SolarConstraint.csv',header=0)
+df_wind_cap=pd.read_csv('../data/generator/WindCap.csv',header=0)
+df_wind_cons=pd.read_csv('../data/generator/WindConstraint.csv',header=0)
+
+df_veh_cap=pd.read_csv('../data/vehicle/VehiclesCap.csv',header=0)
 # df_veh_con=pd.read_csv('../data/netload/VehicleConstraint.csv',header=0)
 
 #read parameters for net load
@@ -43,13 +46,17 @@ with open(''+str(data_name)+'.dat', 'w') as f:
         f.write(unit_name + ' ')
     f.write(';\n\n')
 
-# wind solar set  
+# wind set  
 
-    f.write('set WindSolar :=\n')
-    for gen in range(0,len(df_windsolar_cons)):
-        unit_name = df_windsolar_cons.loc[gen,'name']
-        unit_name = unit_name.replace(' ','_')
-        f.write(unit_name + ' ')
+    f.write('set Wind :=\n')
+    unit_name = 'wind'
+    f.write(unit_name + ' ')
+    f.write(';\n\n')
+
+# solar set 
+    f.write('set Solar :=\n')
+    unit_name = 'solar'
+    f.write(unit_name + ' ')
     f.write(';\n\n')
 
 # Vehicle set  
@@ -88,20 +95,37 @@ with open(''+str(data_name)+'.dat', 'w') as f:
         f.write('\n')
     f.write(';\n\n')     
 
-####### create parameter matrix for solar wind generators
+####### create parameter matrix for wind generators
     f.write('param:' + '\t')
-    for c in df_windsolar_cons.columns:
+    for c in df_wind_cons.columns:
         if c != 'name':
             f.write(c + '\t')
     f.write(':=\n\n')
-    for i in range(0,len(df_windsolar_cons)):    
-        for c in df_windsolar_cons.columns:
+    for i in range(0,len(df_wind_cons)):    
+        for c in df_wind_cons.columns:
             if c == 'name':
-                unit_name = df_windsolar_cons.loc[i,'name']
+                unit_name = df_wind_cons.loc[i,'name']
                 unit_name = unit_name.replace(' ','_')
                 f.write(unit_name + '\t')  
             else:
-                f.write(str((df_windsolar_cons.loc[i,c])) + '\t')               
+                f.write(str((df_wind_cons.loc[i,c])) + '\t')               
+        f.write('\n')
+    f.write(';\n\n') 
+
+####### create parameter matrix for solar generators
+    f.write('param:' + '\t')
+    for c in df_solar_cons.columns:
+        if c != 'name':
+            f.write(c + '\t')
+    f.write(':=\n\n')
+    for i in range(0,len(df_solar_cons)):    
+        for c in df_solar_cons.columns:
+            if c == 'name':
+                unit_name = df_solar_cons.loc[i,'name']
+                unit_name = unit_name.replace(' ','_')
+                f.write(unit_name + '\t')  
+            else:
+                f.write(str((df_solar_cons.loc[i,c])) + '\t')               
         f.write('\n')
     f.write(';\n\n') 
 
@@ -114,18 +138,22 @@ with open(''+str(data_name)+'.dat', 'w') as f:
     # load (hourly)
     f.write('param:' + '\t' + 'SimDemand:=' + '\n')      
     for h in range(0,len(df_load)): 
-        f.write(str(h+1) + '\t' + str(df_load.loc[h,'cleaned demand (MW)']) + '\n')
+        f.write(str(h+1) + '\t' + str(df_load.loc[h,'demand (MW)']) + '\n')
     f.write(';\n\n')
 
-####### Wind and Solar Cap data ###
-    f.write('param:' + '\t')
-    for c in df_windsolar_cap.columns:
-        if c != 'name':
-            f.write(c + '\t')
-    f.write(':=\n\n')
-    for i in range(0,len(df_windsolar_cap)):    
-        for c in df_windsolar_cap.columns: 
-            f.write(str(i+1) + '\t' + str(df_windsolar_cap.iloc[i,c]) + '\t')             
+#######  Solar Cap data ###
+    f.write('param:' + '\t'+'maxcap_s:='+'\n')
+    for i in range(0,len(df_solar_cap)):    
+        for c in df_solar_cap.columns: 
+            f.write(str(i+1) + '\t' + str(df_solar_cap.loc[i,'maxcap_s']) + '\t')             
+        f.write('\n')
+    f.write(';\n\n')
+
+####### Wind Cap data ###
+    f.write('param:' + '\t'+'maxcap_w:='+'\n')
+    for i in range(0,len(df_wind_cap)):    
+        for c in df_wind_cap.columns: 
+            f.write(str(i+1) + '\t' + str(df_wind_cap.loc[i,'maxcap_w']) + '\t')             
         f.write('\n')
     f.write(';\n\n')
 
@@ -137,7 +165,7 @@ with open(''+str(data_name)+'.dat', 'w') as f:
     f.write(':=\n\n')
     for i in range(0,len(df_veh_cap)):    
         for c in df_veh_cap.columns: 
-            f.write(str(i+1) + '\t' + str(df_veh_cap.iloc[i,c]) + '\t')             
+            f.write(str(i+1) + '\t' + str(df_veh_cap.loc[i,c]) + '\t')             
         f.write('\n')
     f.write(';\n\n')
 
@@ -147,7 +175,8 @@ print ('Complete:',data_name)
 # creating optimization with pyomo
 model = AbstractModel()
 ########## ===== Generators set ====== #######
-model.WindSolar=Set()
+model.Wind=Set()
+model.Solar=Set()
 model.Vehicle=Set()
 model.Generators = Set()
 
@@ -186,6 +215,8 @@ model.mincap = Param(model.Generators)
 model.opcost = Param(model.Generators)
 #Variable O&M
 model.var_om = Param(model.Generators)
+#Variable O&M
+model.fix_om = Param(model.Generators)
 #Start cost
 model.st_cost = Param(model.Generators)
 #Ramp rate: RL
@@ -217,79 +248,109 @@ model.switch = Var(model.Generators,model.HH_periods, within=Binary,initialize=0
 #Amount of non served energy offered by an unit in each hour
 model.nse = Var(model.HH_periods, within=NonNegativeReals,initialize=0)
 
-#####==== Parameters for wind/solar ===####
+#####==== Parameters for solar ===####
 #Max capacity
-model.maxcap_ws = Param(model.WindSolar,model.HH_periods)
+model.maxcap_s = Param(model.SH_periods)
 #operational cost
-model.opcost_ws = Param(model.WindSolar)
+model.opcost_s = Param(model.Solar)
 #Variable O&M
-model.var_om_ws = Param(model.WindSolar)
+model.var_om_s = Param(model.Solar)
 #Start cost
-model.st_cost_ws = Param(model.WindSolar)
+model.st_cost_s = Param(model.Solar)
 #Ramp rate: RL
-model.ramp_ws  = Param(model.WindSolar)
+model.ramp_s  = Param(model.Solar)
 #Minimun up time
-model.minup_ws = Param(model.WindSolar)
-#regulation eligibility
-model.regelig_ws = Param(model.WindSolar)
-#regulation cost
-model.regcost_ws = Param(model.WindSolar)
+model.minup_s = Param(model.Solar)
+
+
+#####=======================Decision variables for solar======================########
+
+##Amount of day-ahead energy generated by each generator at each hour
+model.mwh_s = Var(model.HH_periods, within=NonNegativeReals,initialize=0)
+
+##Amount of day-ahead capacity for regulation up by each generator at each hour
+model.regup_s = Var(model.HH_periods, within=NonNegativeReals,initialize=0)
+
+##Amount of day-ahead capacity for regulation down by each generator at each hour
+model.regdown_s = Var(model.HH_periods, within=NonNegativeReals,initialize=0)
+
+#1 if unit is on in hour i, otherwise 0
+model.on_s = Var(model.HH_periods, within=Binary, initialize=0)
+
+#1 if unit is switching on in hour i, otherwise 0
+model.switch_s = Var(model.HH_periods, within=Binary,initialize=0)
+
+#Amount of non served energy offered by an unit in each hour
+# model.nse_s = Var(model.HH_periods, within=NonNegativeReals,initialize=0)
+
+#####==== Parameters for wind===####
+#Max capacity
+model.maxcap_w = Param(model.SH_periods)
+#operational cost
+model.opcost_w = Param(model.Wind)
+#Variable O&M
+model.var_om_w = Param(model.Wind)
+#Start cost
+model.st_cost_w = Param(model.Wind)
+#Ramp rate: RL
+model.ramp_w  = Param(model.Wind)
+#Minimun up time
+model.minup_w = Param(model.Wind)
+
 
 #####=======================Decision variables for wind/solar======================########
 
 ##Amount of day-ahead energy generated by each generator at each hour
-model.mwh_ws = Var(model.WindSolar,model.HH_periods, within=NonNegativeReals,initialize=0)
+model.mwh_w = Var(model.HH_periods, within=NonNegativeReals,initialize=0)
 
 ##Amount of day-ahead capacity for regulation up by each generator at each hour
-model.regup_ws = Var(model.WindSolar,model.HH_periods, within=NonNegativeReals,initialize=0)
+model.regup_w = Var(model.HH_periods, within=NonNegativeReals,initialize=0)
 
 ##Amount of day-ahead capacity for regulation down by each generator at each hour
-model.regdown_ws = Var(model.WindSolar,model.HH_periods, within=NonNegativeReals,initialize=0)
+model.regdown_w = Var(model.HH_periods, within=NonNegativeReals,initialize=0)
 
 #1 if unit is on in hour i, otherwise 0
-model.on_ws = Var(model.WindSolar,model.HH_periods, within=Binary, initialize=0)
+model.on_w = Var(model.HH_periods, within=Binary, initialize=0)
 
 #1 if unit is switching on in hour i, otherwise 0
-model.switch_ws = Var(model.WindSolar,model.HH_periods, within=Binary,initialize=0)
+model.switch_w = Var(model.HH_periods, within=Binary,initialize=0)
 
 #Amount of non served energy offered by an unit in each hour
-model.nse_ws = Var(model.HH_periods, within=NonNegativeReals,initialize=0)
+# model.nse_w = Var(model.HH_periods, within=NonNegativeReals,initialize=0)
 
 
 ######===========Parameters for Vehicles=============================###
 #vehicle generation
-model.gen_capacity_veh=Param(model.Vehicle,model.HH_periods)
-model.regup_capacity_veh=Param(model.Vehicle,model.HH_periods)
-model.regdown_capacity_veh=Param(model.Vehicle,model.HH_periods) 
+model.gen_capacity_veh=Param(model.SH_periods)
+model.regup_capacity_veh=Param(model.SH_periods)
+model.regdown_capacity_veh=Param(model.SH_periods) 
 # model.var_veh=Param(model.HH_periods) 
 
 #####=======================Decision variables for vehicles======================########
 #Vehicle:
-model.mwh_veh=Var(model.Vehicle,model.HH_periods, within=NonNegativeReals,initialize=0)
-model.regup_veh=Var(model.Vehicle,model.HH_periods, within=NonNegativeReals,initialize=0)
-model.regdown_veh=Var(model.Vehicle,model.HH_periods, within=NonNegativeReals,initialize=0)
+model.mwh_veh=Var(model.HH_periods, within=NonNegativeReals,initialize=0)
+model.regup_veh=Var(model.HH_periods, within=NonNegativeReals,initialize=0)
+model.regdown_veh=Var(model.HH_periods, within=NonNegativeReals,initialize=0)
 
-def SysCost(model,j,i):
-    operational = sum(model.mwh[j,i]*(model.opcost[j]+model.var_om[j]) for i in model.hh_periods for j in model.Generators)+
-    sum(model.mwh_ws[j,i]*(model.opcost[j]+model.var_om_ws[j]) for i in model.hh_periods for j in model.WindSolar)+
+def SysCost(model):
+    operational = sum(model.mwh[j,i]*(model.opcost[j]+model.var_om[j]) for i in model.hh_periods for j in model.Generators)
+    + sum(model.mwh_w[i]*(model.opcost_w[j]+model.var_om_w[j]) for i in model.hh_periods for j in model.Wind)
+    + sum(model.mwh_s[i]*(model.opcost_s[j]+model.var_om_s[j]) for i in model.hh_periods for j in model.Solar)
+    + sum(model.mwh_veh[i]*(0.1) for i in model.hh_periods for j in model.Vehicle)
     # sum(model.mwh_veh[j,i]*(model.var_veh[j]) for i in model.hh_periods for j in model.Vehicle)
-    sum(model.mwh_veh[j,i]*(0.1) for i in model.hh_periods for j in model.Vehicle)
 
-    starts = sum(model.st_cost[j]*model.switch[j,i] for i in model.hh_periods for j in model.Generators)+
-    sum(model.st_cost_ws[j]*model.switch_ws[j,i] for i in model.hh_periods for j in model.WindSolar)
-
-    regulationup_capacity = sum(model.regup[j,i]*model.regcost[j]  for i in model.hh_periods for j in model.Generators)+
-    sum(model.regup_ws[j,i]*model.regcost[j] for i in model.hh_periods for j in model.WindSolar)+
+    starts = sum(model.st_cost[j]*model.switch[j,i] for i in model.hh_periods for j in model.Generators)
+    
+    regulationup_capacity = sum(model.regup[j,i]*model.regcost[j]  for i in model.hh_periods for j in model.Generators)
     # sum(model.regup_veh[j,i]*(model.var_veh[j]) for i in model.hh_periods for j in model.Vehicle)
-    sum(model.regup_veh[j,i]*(0.1) for i in model.hh_periods for j in model.Vehicle)
+    + sum(model.regup_veh[i]*(0.1) for i in model.hh_periods for j in model.Vehicle)
 
-    regulationdown_capacity = sum(model.regdown[j,i]*model.regcost[j] for i in model.hh_periods for j in model.Generators)+
-    sum(model.regdown_ws[j,i]*model.regcost[j] for i in model.hh_periods for j in model.WindSolar)+
+    regulationdown_capacity = sum(model.regdown[j,i]*model.regcost[j] for i in model.hh_periods for j in model.Generators)
     # sum(model.regdown_veh[j,i]*(model.var_veh[j]) for i in model.hh_periods for j in model.Vehicle)
-    sum(model.regdown_veh[j,i]*(0.1) for i in model.hh_periods for j in model.Vehicle) 
+    + sum(model.regdown_veh[i]*(0.1) for i in model.hh_periods for j in model.Vehicle) 
     #0.5 and 0.3 are the scalar factor for unit cost of regulation up and down compared to variable operational cost, can be changed
-    nonserved = sum(model.nse[i]*20 for i in model.hh_periods)+
-    sum(model.nse_ws[i]*10 for i in model.hh_periods)
+
+    nonserved = sum(model.nse[i]*20 for i in model.hh_periods)
     #20 is the cost of non-served energy [$/MWh], can be changed
     #10 is the cost of non-served energy for wind and solar[$/MWh], can be changed
     
@@ -301,11 +362,8 @@ model.SystemCost = Objective(rule=SysCost, sense=minimize)
 def SwitchCon(model,j,i):
     return model.switch[j,i] >= 1 - model.on[j,i-1] - (1 - model.on[j,i])
 model.SwitchConstraint = Constraint(model.Generators,model.hh_periods,rule = SwitchCon)
- 
- def SwitchCon_ws(model,j,i):
-    return model.switch_ws[j,i] >= 1 - model.on_ws[j,i-1] - (1 - model.on_ws[j,i])
-model.SwitchConstraint_ws = Constraint(model.WindSolar,model.hh_periods,rule = SwitchCon_ws)
- 
+
+
 ######========== Up/Down Time Constraint =========#############
 ##Min Up time
 def MinUp(model,j,i,k):
@@ -315,28 +373,13 @@ def MinUp(model,j,i,k):
         return Constraint.Skip
 model.MinimumUp = Constraint(model.Generators,model.HH_periods,model.HH_periods,rule=MinUp)
 
-def MinUp_ws(model,j,i,k):
-    if i > 0 and k > i and k < min(i+model.minup_ws[j]-1,model.HorizonHours):
-        return model.on_ws[j,i] - model.on_ws[j,i-1] <= model.on_ws[j,k]
-    else: 
-        return Constraint.Skip
-model.MinimumUp_ws = Constraint(model.WindSolar,model.HH_periods,model.HH_periods,rule=MinUp_ws)
-
-##Min Down time
-def MinDown(model,j,i,k):
-   if i > 0 and k > i and k < min(i+model.mindn[j]-1,model.HorizonHours):
-       return model.on[j,i-1] - model.on[j,i] <= 1 - model.on[j,k]
-   else:
-       return Constraint.Skip
-model.MinimumDown = Constraint(model.Generators,model.HH_periods,model.HH_periods,rule=MinDown)
-
-##Min Down time
-def MinDown_ws(model,j,i,k):
-   if i > 0 and k > i and k < min(i+model.mindn_ws[j]-1,model.HorizonHours):
-       return model.on_ws[j,i-1] - model.on_ws[j,i] <= 1 - model.on_ws[j,k]
-   else:
-       return Constraint.Skip
-model.MinimumDown_ws = Constraint(model.WindSolar,model.HH_periods,model.HH_periods,rule=MinDown_ws)
+# ##Min Down time
+# def MinDown(model,j,i,k):
+#    if i > 0 and k > i and k < min(i+model.mindn[j]-1,model.HorizonHours):
+#        return model.on[j,i-1] - model.on[j,i] <= 1 - model.on[j,k]
+#    else:
+#        return Constraint.Skip
+# model.MinimumDown = Constraint(model.Generators,model.HH_periods,model.HH_periods,rule=MinDown)
 
 ######==========Ramp Rate Constraints =========#############
 def Ramp1(model,j,i):
@@ -345,11 +388,17 @@ def Ramp1(model,j,i):
     return a - b <= model.ramp[j]* model.on[j,i]+ model.mincap[j]*model.switch[j,i]
 model.RampCon1 = Constraint(model.Generators,model.ramp_periods,rule=Ramp1)
 
-def Ramp1_ws(model,j,i):
-    a = model.mwh_ws[j,i]
-    b = model.mwh_ws[j,i-1]
-    return a - b <= model.ramp_ws[j]* model.on_ws[j,i]+ model.mincap_ws[j,i]*model.switch_ws[j,i]
-model.RampCon1_ws = Constraint(model.WindSolar,model.ramp_periods,rule=Ramp1_ws)
+def Ramp1_w(model,j,i):
+    a = model.mwh_w[i]
+    b = model.mwh_w[i-1]
+    return a - b <= model.ramp_w[j]* model.on_w[i]
+model.RampCon1_w = Constraint(model.Wind,model.ramp_periods,rule=Ramp1_w)
+
+def Ramp1_s(model,j,i):
+    a = model.mwh_s[i]
+    b = model.mwh_s[i-1]
+    return a - b <= model.ramp_s[j]* model.on_s[i]
+model.RampCon1_s = Constraint(model.Solar,model.ramp_periods,rule=Ramp1_s)
 
 def Ramp2(model,j,i):
     a = model.mwh[j,i]
@@ -357,11 +406,17 @@ def Ramp2(model,j,i):
     return b - a <= model.ramp[j]* model.on[j,i-1]+ model.mincap[j]*(model.on[j,i-1]-model.on[j,i]+model.switch[j,i])
 model.RampCon2 = Constraint(model.Generators,model.ramp_periods,rule=Ramp2)
 
-def Ramp2_ws(model,j,i):
-    a = model.mwh_ws[j,i]
-    b = model.mwh_ws[j,i-1]
-    return b - a <= model.ramp_ws[j]* model.on_ws[j,i-1]+ model.mincap_ws[j,i]*(model.on_ws[j,i-1]-model.on_ws[j,i]+model.switch_ws[j,i])
-model.RampCon2_ws = Constraint(model.WindSolar,model.ramp_periods,rule=Ramp2_ws)
+def Ramp2_w(model,j,i):
+    a = model.mwh_w[i]
+    b = model.mwh_w[i-1]
+    return b - a <= model.ramp_w[j]* model.on_w[i-1]
+model.RampCon2_w = Constraint(model.Wind,model.ramp_periods,rule=Ramp2_w)
+
+def Ramp2_s(model,j,i):
+    a = model.mwh_s[i]
+    b = model.mwh_s[i-1]
+    return b - a <= model.ramp_s[j]* model.on_s[i-1]
+model.RampCon2_s = Constraint(model.Solar,model.ramp_periods,rule=Ramp2_s)
 
 ######=========== Capacity Constraints ============##########
 #Constraints for Max & Min Capacity of dispatchable resources
@@ -369,45 +424,41 @@ def MaxC(model,j,i):
     return model.mwh[j,i]  <= model.on[j,i] * model.maxcap[j] 
 model.MaxCap= Constraint(model.Generators,model.hh_periods,rule=MaxC)
 
-def MaxC_ws(model,j,i):
-    return model.mwh_ws[j,i]  <= model.on_ws[j,i] * model.maxcap_ws[j,i] 
-model.MaxCap_ws= Constraint(model.WindSolar,model.hh_periods,rule=MaxC_ws)
+def MaxC_w(model,i):
+    return model.mwh_w[i]  <= model.on_w[i] * model.maxcap_w[i] 
+model.MaxCap_w= Constraint(model.hh_periods,rule=MaxC_w)
+
+def MaxC_s(model,i):
+    return model.mwh_s[i]  <= model.on_s[i] * model.maxcap_s[i] 
+model.MaxCap_s= Constraint(model.hh_periods,rule=MaxC_s)
 
 def MinC(model,j,i):
     return model.mwh[j,i] >= model.on[j,i] * model.mincap[j]
 model.MinCap= Constraint(model.Generators,model.hh_periods,rule=MinC)
 
-def MinC_ws(model,j,i):
-    return model.mwh_ws[j,i]  >= model.on_ws[j,i] * model.mincap_ws[j,i] 
-model.MinCap_ws= Constraint(model.WindSolar,model.hh_periods,rule=MinC_ws)
+def MaxC_veh(model,i):
+    return model.mwh_veh[i]  <= model.gen_capacity_veh[i] 
+model.MaxCap_veh= Constraint(model.hh_periods,rule=MaxC_veh)
 
-def MaxC_veh(model,j,i):
-    return model.mwh_veh[j,i]  <= model.gen_capacity_veh[j,i] 
-model.MaxCap_veh= Constraint(model.Vehicle,model.hh_periods,rule=MaxC_veh)
+def MaxRegUp_veh(model,i):
+    return model.regup_veh[i]  <= model.regup_capacity_veh[i] 
+model.MaxRegUp_veh= Constraint(model.hh_periods,rule=MaxRegUp_veh)
 
-def MinC_veh(model,j,i):
-    return model.mwh_veh[j,i]  >= 0
-model.MinCap_veh= Constraint(model.Vehicle,model.hh_periods,rule=MinC_veh)
-
-def MaxRegUp_veh(model,j,i):
-    return model.regup_veh[j,i]  <= model.regup_capacity_veh[j,i] 
-model.MaxRegUp_veh= Constraint(model.Vehicle,model.hh_periods,rule=MaxRegUp_veh)
-
-def MaxRegDown_veh(model,j,i):
-    return model.regdown_veh[j,i]  <= model.regdown_capacity_veh[j,i] 
-model.MaxRegDown_veh= Constraint(model.Vehicle,model.hh_periods,rule=MaxRegDown_veh)
+def MaxRegDown_veh(model,i):
+    return model.regdown_veh[i]  <= model.regdown_capacity_veh[i] 
+model.MaxRegDown_veh= Constraint(model.hh_periods,rule=MaxRegDown_veh)
 
 
 ######===================Energy, regulation capacity and zero-sum constraints ==================########
 
 ##System Energy Requirement
 def SysEnergy(model,i):
-    return sum(model.mwh[j,i] for j in model.Generators) +model.nse[i] +sum(model.mwh_ws[j,i] for j in model.WindSolar) +model.nse_ws[i] +sum(model.mwh_veh[j,i] for j in model.Vehicle)  >= model.HorizonDemand[i] 
+    return sum(model.mwh[j,i] for j in model.Generators) +model.nse[i] +model.mwh_w[i]+model.mwh_s[i]  +model.mwh_veh[i]   >= model.HorizonDemand[i] 
 model.SysEnergy = Constraint(model.hh_periods,rule=SysEnergy)
 
 ##Regulation up Reserve Requirement
 def RegulationUp(model,i):
-    return sum(model.regup[j,i] for j in model.Generators)+sum(model.regup_ws[j,i] for j in model.WindSolar)+sum(model.regup_veh[j,i] for j in model.Vehicle) >= model.regup_margin * model.HorizonDemand[i] 
+    return sum(model.regup[j,i] for j in model.Generators)+model.regup_veh[i]  >= model.regup_margin * model.HorizonDemand[i] 
 model.RegulationUp = Constraint(model.hh_periods,rule=RegulationUp)           
 
 ##Regulation up reserve can only be offered by units that are online
@@ -415,24 +466,15 @@ def RegulationUp2(model,j,i):
     return model.regup[j,i] <= model.on[j,i]*model.maxcap[j]-model.mwh[j,i] 
 model.RegulationUp2= Constraint(model.Generators,model.hh_periods,rule=RegulationUp2) 
 
-##Regulation up reserve can only be offered by units that are online
-def RegulationUp2_ws(model,j,i):
-    return model.regup_ws[j,i] <= model.on_ws[j,i]*model.maxcap_ws[j,i]-model.mwh_ws[j,i] 
-model.RegulationUp2_ws= Constraint(model.WindSolar,model.hh_periods,rule=RegulationUp_ws) 
-
 ##Regulation down Reserve Requirement
 def RegulationDown(model,i):
-    return sum(model.regdown[j,i] for j in model.Generators)+sum(model.regdown_ws[j,i] for j in model.WindSolar)+sum(model.regdown_veh[j,i] for j in model.Vehicle) >= model.regdown_margin * model.HorizonDemand[i] 
+    return sum(model.regdown[j,i] for j in model.Generators)+model.regdown_veh[i]>= model.regdown_margin * model.HorizonDemand[i] 
 model.RegulationDown = Constraint(model.hh_periods,rule=RegulationDown)  
 
 ##Regulation up reserve can only be offered by units that are online
 def RegulationDown2(model,j,i):
     return model.regdown[j,i] <= model.mwh[j,i]- model.on[j,i]*model.mincap[j] 
 model.RegulationDown2= Constraint(model.Generators,model.hh_periods,rule=RegulationDown2) 
-
-def RegulationDown2_ws(model,j,i):
-    return model.regdown_ws[j,i] <= model.mwh_ws[j,i]- model.on_ws[j,i]*model.mincap_ws[j,i] 
-model.RegulationDown2_ws= Constraint(model.WindSolar,model.hh_periods,rule=RegulationDown2_ws) 
 
 ######========== Zero Sum Constraint =========#############
 # for each generator, total energy for energy market and capacity market can not exceed the maximum capacity
