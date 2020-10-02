@@ -1,2 +1,2 @@
-﻿name,opcost,minup,ramp,st_cost,var_om,fix_om,regcost
-wind,0.025673631,0,50.12,0,0,39550,9999
+﻿name,opcost_w,minup_w,ramp_w,st_cost_w,var_om_w
+wind,0.025673631,0,50.12,0,0

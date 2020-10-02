@@ -1,2 +1,2 @@
-﻿name,opcost,minup,ramp,st_cost,var_om,fix_om,regcost
-solar,0.02545466,0,15.37,0,0,27750,9999
+﻿name,opcost_s,minup_s,ramp_s,st_cost_s,var_om_s
+solar,0.02545466,0,15.37,0,0

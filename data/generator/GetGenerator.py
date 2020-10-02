@@ -689,6 +689,7 @@ stoEff,stoMinSOC = .85,0 #extra storage parameters
 genFleet = setupGeneratorFleet(['California'],['WEC_CALN', 'WEC_LADW', 'WECC_SCE', 'WEC_SDGE', 'WECC_IID','WEC_BANC', 'WECC_PNW', 
             'WECC_AZ', 'WECC_NNV'],2035,2030,fuelPrices,True, regElig, regCostFrac) #,stoEff,stoMinSOC
 generatorDispa,generatorWS=SeperateWindSolar(genFleet)
+generatorDispa.drop(['PlantType'],axis=1)
 generatorDispa.to_csv('Generator.csv',index=False)
 generatorWS.to_csv('WindSolarConstraintRaw.csv',index=False)
 
