@@ -10,166 +10,191 @@ import csv
 import pandas as pd
 import numpy as np
 
-#  
-SimDays = 365
-SimHours = SimDays * 24
-HorizonHours = 48  ##planning horizon (e.g., 24, 48, 72 hours etc.)
-regup_margin = 0.15  ##minimum regulation up reserve as a percent of system demand
-regdown_margin = 0.50 ##minimum regulation down reserve as a percent of total reserve
+# #  
+# SimDays = 365
+# SimHours = SimDays * 24
+# HorizonHours = 48  ##planning horizon (e.g., 24, 48, 72 hours etc.)
+# regup_margin = 0.15  ##minimum regulation up reserve as a percent of system demand
+# regdown_margin = 0.50 ##minimum regulation down reserve as a percent of total reserve
 
-data_name = 'test2'
-#read parameters for dispatchable generators  
-df_gen = pd.read_csv('../data/generator/Generator.csv',header=0)
-df_solar_cap=pd.read_csv('../data/generator/SolarCap.csv',header=0)
-df_solar_cons=pd.read_csv('../data/generator/SolarConstraint.csv',header=0)
-df_wind_cap=pd.read_csv('../data/generator/WindCap.csv',header=0)
-df_wind_cons=pd.read_csv('../data/generator/WindConstraint.csv',header=0)
+# data_name = 'test_iteration2'
+# # # read parameters for dispatchable generators  
+# # df_gen = pd.read_csv('../data/generator/Generator_test.csv',header=0)
+# # df_solar_cap=pd.read_csv('../data/generator/SolarCap_test.csv',header=0)
+# # df_solar_cons=pd.read_csv('../data/generator/SolarConstraint.csv',header=0)
+# # df_wind_cap=pd.read_csv('../data/generator/WindCap_test.csv',header=0)
+# # df_wind_cons=pd.read_csv('../data/generator/WindConstraint.csv',header=0)
+# # df_veh_cap=pd.read_csv('../data/vehicle/VehiclesCap_test.csv',header=0)
+# # # df_veh_con=pd.read_csv('../data/netload/VehicleConstraint.csv',header=0)
+# # #read parameters for net load
+# # df_load = pd.read_csv('../data/netload/CAISO1819_test.csv',header=0)
 
-df_veh_cap=pd.read_csv('../data/vehicle/VehiclesCap.csv',header=0)
-# df_veh_con=pd.read_csv('../data/netload/VehicleConstraint.csv',header=0)
+# df_gen = pd.read_csv('../data/generator/Generator.csv',header=0)
+# df_solar_cap=pd.read_csv('../data/generator/SolarCap.csv',header=0)
+# df_solar_cons=pd.read_csv('../data/generator/SolarConstraint.csv',header=0)
+# df_wind_cap=pd.read_csv('../data/generator/WindCap.csv',header=0)
+# df_wind_cons=pd.read_csv('../data/generator/WindConstraint.csv',header=0)
+# # df_veh_con=pd.read_csv('../data/netload/VehicleConstraint.csv',header=0)
+# #read parameters for net load
+# # df_load = pd.read_csv('../data/netload/CAISO1819.csv',header=0)
 
-#read parameters for net load
-df_load = pd.read_csv('../data/netload/CAISO1819.csv',header=0)
-print('load_CAISO1819') 
+# # second iteration
+# myresult=pd.read_csv('../data/vehicle/VehiclesCap_iteration1.csv',header=0)
+# N = 6
+# myresult.groupby(myresult.index // N).sum()/6
+# myresult=myresult.rename(columns={'EnergyDemand':'netload','EnergyGeneration':'gen_capacity_veh','Regup':'regup_capacity_veh','Regdown':'regdown_capacity_veh'})
+# df_veh_cap=myresult[['gen_capacity_veh'	,'regup_capacity_veh',	'regdown_capacity_veh']]
+# df_load = pd.read_csv('../data/netload/CAISO1819.csv',header=0)[:24]
+# df_load['netload']=myresult['netload']+df_load['netload']
+
+
+# print('load_CAISO1819') 
+
+# df_gen['maxcap']=df_gen['maxcap']*3
+# df_solar_cap['maxcap_s']=df_solar_cap['maxcap_s']*3
+# df_wind_cap['maxcap_w']=df_wind_cap['maxcap_w']*3
 
 
 ######====== write data.dat file ======########
 # data.dat file is the data files for loading data into optimization model with pyomo
+def writeDatFile(df_gen,df_solar_cap,df_solar_cons,df_wind_cap,df_wind_cons,df_veh_cap,df_load,SimDays,SimHours,HorizonHours,regup_margin,regdown_margin,data_name):
+    with open(''+str(data_name)+'.dat', 'w') as f:
 
-with open(''+str(data_name)+'.dat', 'w') as f:
+    # generators set  
+        f.write('set Generators :=\n')
+        for gen in range(0,len(df_gen)):
+            unit_name = df_gen.loc[gen,'name']
+            unit_name = unit_name.replace(' ','_')
+            f.write(unit_name + ' ')
+        f.write(';\n\n')
 
-# generators set  
-    f.write('set Generators :=\n')
-    for gen in range(0,len(df_gen)):
-        unit_name = df_gen.loc[gen,'name']
-        unit_name = unit_name.replace(' ','_')
+    # wind set  
+
+        f.write('set Wind :=\n')
+        unit_name = 'wind'
         f.write(unit_name + ' ')
-    f.write(';\n\n')
+        f.write(';\n\n')
 
-# wind set  
+    # solar set 
+        f.write('set Solar :=\n')
+        unit_name = 'solar'
+        f.write(unit_name + ' ')
+        f.write(';\n\n')
 
-    f.write('set Wind :=\n')
-    unit_name = 'wind'
-    f.write(unit_name + ' ')
-    f.write(';\n\n')
-
-# solar set 
-    f.write('set Solar :=\n')
-    unit_name = 'solar'
-    f.write(unit_name + ' ')
-    f.write(';\n\n')
-
-# Vehicle set  
-    f.write('set Vehicle :=\n')
-    unit_name = 'vehicle'
-    f.write(unit_name + ' ')
-    f.write(';\n\n')
-     
-####### simulation period and horizon
-    f.write('param SimHours := %d;' % SimHours)
-    f.write('\n')
-    f.write('param SimDays:= %d;' % SimDays)
-    f.write('\n\n')   
-    f.write('param HorizonHours := %d;' % HorizonHours)
-    f.write('\n\n')
-    f.write('param regup_margin := %0.3f;' % regup_margin)
-    f.write('\n\n')
-    f.write('param regdown_margin := %0.3f;' % regdown_margin)
-    f.write('\n\n')
+    # Vehicle set  
+        f.write('set Vehicle :=\n')
+        unit_name = 'vehicle'
+        f.write(unit_name + ' ')
+        f.write(';\n\n')
+        
+    ####### simulation period and horizon
+        f.write('param SimHours := %d;' % SimHours)
+        f.write('\n')
+        f.write('param SimDays:= %d;' % SimDays)
+        f.write('\n\n')   
+        f.write('param HorizonHours := %d;' % HorizonHours)
+        f.write('\n\n')
+        f.write('param regup_margin := %0.3f;' % regup_margin)
+        f.write('\n\n')
+        f.write('param regdown_margin := %0.3f;' % regdown_margin)
+        f.write('\n\n')
 
 
-####### create parameter matrix for generators
-    f.write('param:' + '\t')
-    for c in df_gen.columns:
-        if c != 'name':
-            f.write(c + '\t')
-    f.write(':=\n\n')
-    for i in range(0,len(df_gen)):    
+    ####### create parameter matrix for generators
+        f.write('param:' + '\t')
         for c in df_gen.columns:
-            if c == 'name':
-                unit_name = df_gen.loc[i,'name']
-                unit_name = unit_name.replace(' ','_')
-                f.write(unit_name + '\t')  
-            else:
-                f.write(str((df_gen.loc[i,c])) + '\t')               
-        f.write('\n')
-    f.write(';\n\n')     
+            if c != 'name':
+                f.write(c + '\t')
+        f.write(':=\n\n')
+        for i in range(0,len(df_gen)):    
+            for c in df_gen.columns:
+                if c == 'name':
+                    unit_name = df_gen.loc[i,'name']
+                    unit_name = unit_name.replace(' ','_')
+                    f.write(unit_name + '\t')  
+                else:
+                    f.write(str((df_gen.loc[i,c])) + '\t')               
+            f.write('\n')
+        f.write(';\n\n')     
 
-####### create parameter matrix for wind generators
-    f.write('param:' + '\t')
-    for c in df_wind_cons.columns:
-        if c != 'name':
-            f.write(c + '\t')
-    f.write(':=\n\n')
-    for i in range(0,len(df_wind_cons)):    
+    ####### create parameter matrix for wind generators
+        f.write('param:' + '\t')
         for c in df_wind_cons.columns:
-            if c == 'name':
-                unit_name = df_wind_cons.loc[i,'name']
-                unit_name = unit_name.replace(' ','_')
-                f.write(unit_name + '\t')  
-            else:
-                f.write(str((df_wind_cons.loc[i,c])) + '\t')               
-        f.write('\n')
-    f.write(';\n\n') 
+            if c != 'name':
+                f.write(c + '\t')
+        f.write(':=\n\n')
+        for i in range(0,len(df_wind_cons)):    
+            for c in df_wind_cons.columns:
+                if c == 'name':
+                    unit_name = df_wind_cons.loc[i,'name']
+                    unit_name = unit_name.replace(' ','_')
+                    f.write(unit_name + '\t')  
+                else:
+                    f.write(str((df_wind_cons.loc[i,c])) + '\t')               
+            f.write('\n')
+        f.write(';\n\n') 
 
-####### create parameter matrix for solar generators
-    f.write('param:' + '\t')
-    for c in df_solar_cons.columns:
-        if c != 'name':
-            f.write(c + '\t')
-    f.write(':=\n\n')
-    for i in range(0,len(df_solar_cons)):    
+    ####### create parameter matrix for solar generators
+        f.write('param:' + '\t')
         for c in df_solar_cons.columns:
-            if c == 'name':
-                unit_name = df_solar_cons.loc[i,'name']
-                unit_name = unit_name.replace(' ','_')
-                f.write(unit_name + '\t')  
-            else:
-                f.write(str((df_solar_cons.loc[i,c])) + '\t')               
-        f.write('\n')
-    f.write(';\n\n') 
+            if c != 'name':
+                f.write(c + '\t')
+        f.write(':=\n\n')
+        for i in range(0,len(df_solar_cons)):    
+            for c in df_solar_cons.columns:
+                if c == 'name':
+                    unit_name = df_solar_cons.loc[i,'name']
+                    unit_name = unit_name.replace(' ','_')
+                    f.write(unit_name + '\t')  
+                else:
+                    f.write(str((df_solar_cons.loc[i,c])) + '\t')               
+            f.write('\n')
+        f.write(';\n\n') 
 
-# ####### create parameter matrix for vehicles
-#  f.write('param:'+'\t'+'var_veh:='+'\n')
-#     f.write(0.2 + ' ') # var_veh
-#     f.write(';\n\n')
+    # ####### create parameter matrix for vehicles
+    #  f.write('param:'+'\t'+'var_veh:='+'\n')
+    #     f.write(0.2 + ' ') # var_veh
+    #     f.write(';\n\n')
 
-####### Hourly timeseries (load)
-    # load (hourly)
-    f.write('param:' + '\t' + 'SimDemand:=' + '\n')      
-    for h in range(0,len(df_load)): 
-        f.write(str(h+1) + '\t' + str(df_load.loc[h,'demand (MW)']) + '\n')
-    f.write(';\n\n')
+    ####### Hourly timeseries (load)
+        # load (hourly)
+        f.write('param:' + '\t' + 'SimDemand:=' + '\n')      
+        for h in range(0,len(df_load)): 
+            f.write(str(h+1) + '\t' + str(df_load.loc[h,'netload']) + '\n')
+        f.write(';\n\n')
 
-#######  Solar Cap data ###
-    f.write('param:' + '\t'+'maxcap_s:='+'\n')
-    for i in range(0,len(df_solar_cap)):    
-        for c in df_solar_cap.columns: 
-            f.write(str(i+1) + '\t' + str(df_solar_cap.loc[i,'maxcap_s']) + '\t')             
-        f.write('\n')
-    f.write(';\n\n')
+    #######  Solar Cap data ###
+        f.write('param:' + '\t'+'maxcap_s:='+'\n')
+        for i in range(0,len(df_solar_cap)):    
+            for c in df_solar_cap.columns: 
+                f.write(str(i+1) + '\t' + str(df_solar_cap.loc[i,'maxcap_s']) + '\t')             
+            f.write('\n')
+        f.write(';\n\n')
 
-####### Wind Cap data ###
-    f.write('param:' + '\t'+'maxcap_w:='+'\n')
-    for i in range(0,len(df_wind_cap)):    
-        for c in df_wind_cap.columns: 
-            f.write(str(i+1) + '\t' + str(df_wind_cap.loc[i,'maxcap_w']) + '\t')             
-        f.write('\n')
-    f.write(';\n\n')
+    ####### Wind Cap data ###
+        f.write('param:' + '\t'+'maxcap_w:='+'\n')
+        for i in range(0,len(df_wind_cap)):    
+            for c in df_wind_cap.columns: 
+                f.write(str(i+1) + '\t' + str(df_wind_cap.loc[i,'maxcap_w']) + '\t')             
+            f.write('\n')
+        f.write(';\n\n')
 
-######## Vehicle Cap data ######
-    f.write('param:' + '\t')
-    for c in df_veh_cap.columns:
-        if c != 'name':
-            f.write(c + '\t')
-    f.write(':=\n\n')
-    for i in range(0,len(df_veh_cap)):    
-        for c in df_veh_cap.columns: 
-            f.write(str(i+1) + '\t' + str(df_veh_cap.loc[i,c]) + '\t')             
-        f.write('\n')
-    f.write(';\n\n')
+    ######## Vehicle Cap data ######
+        f.write('param:' + '\t')
+        for c in df_veh_cap.columns:
+            if c != 'name':
+                f.write(c + '\t')
+        f.write(':=\n\n')
+        for i in range(0,len(df_veh_cap)):    
+            for c in df_veh_cap.columns: 
+                if c=='gen_capacity_veh':
+                    f.write(str(i+1) + '\t' + str(df_veh_cap.loc[i,c]) + '\t') 
+                else:
+                    f.write(str(df_veh_cap.loc[i,c]) + '\t')            
+            f.write('\n')
+        f.write(';\n\n')
 
-print ('Complete:',data_name)
+    print ('Complete:',data_name)
 
 
 # creating optimization with pyomo
@@ -336,25 +361,24 @@ def SysCost(model):
     operational = sum(model.mwh[j,i]*(model.opcost[j]+model.var_om[j]) for i in model.hh_periods for j in model.Generators)
     + sum(model.mwh_w[i]*(model.opcost_w[j]+model.var_om_w[j]) for i in model.hh_periods for j in model.Wind)
     + sum(model.mwh_s[i]*(model.opcost_s[j]+model.var_om_s[j]) for i in model.hh_periods for j in model.Solar)
-    + sum(model.mwh_veh[i]*(0.1) for i in model.hh_periods for j in model.Vehicle)
+    + sum(model.mwh_veh[i]*(1) for i in model.hh_periods ) # update battery degradtaion cost
     # sum(model.mwh_veh[j,i]*(model.var_veh[j]) for i in model.hh_periods for j in model.Vehicle)
 
     starts = sum(model.st_cost[j]*model.switch[j,i] for i in model.hh_periods for j in model.Generators)
     
     regulationup_capacity = sum(model.regup[j,i]*model.regcost[j]  for i in model.hh_periods for j in model.Generators)
     # sum(model.regup_veh[j,i]*(model.var_veh[j]) for i in model.hh_periods for j in model.Vehicle)
-    + sum(model.regup_veh[i]*(0.1) for i in model.hh_periods for j in model.Vehicle)
+    + sum(model.regup_veh[i]*(1) for i in model.hh_periods )# update battery degradtaion cost
 
     regulationdown_capacity = sum(model.regdown[j,i]*model.regcost[j] for i in model.hh_periods for j in model.Generators)
     # sum(model.regdown_veh[j,i]*(model.var_veh[j]) for i in model.hh_periods for j in model.Vehicle)
-    + sum(model.regdown_veh[i]*(0.1) for i in model.hh_periods for j in model.Vehicle) 
-    #0.5 and 0.3 are the scalar factor for unit cost of regulation up and down compared to variable operational cost, can be changed
+    + sum(model.regdown_veh[i]*(1) for i in model.hh_periods ) # update battery degradtaion cost
 
-    nonserved = sum(model.nse[i]*20 for i in model.hh_periods)
+    # nonserved = sum(model.nse[i]*20 for i in model.hh_periods)
     #20 is the cost of non-served energy [$/MWh], can be changed
     #10 is the cost of non-served energy for wind and solar[$/MWh], can be changed
     
-    return operational +starts +regulationup_capacity + regulationdown_capacity + nonserved 
+    return operational +starts +regulationup_capacity + regulationdown_capacity #+ nonserved 
 model.SystemCost = Objective(rule=SysCost, sense=minimize)
 
 ######========== Logical Constraint =========#############
@@ -453,7 +477,7 @@ model.MaxRegDown_veh= Constraint(model.hh_periods,rule=MaxRegDown_veh)
 
 ##System Energy Requirement
 def SysEnergy(model,i):
-    return sum(model.mwh[j,i] for j in model.Generators) +model.nse[i] +model.mwh_w[i]+model.mwh_s[i]  +model.mwh_veh[i]   >= model.HorizonDemand[i] 
+    return sum(model.mwh[j,i] for j in model.Generators)  +model.mwh_w[i]+model.mwh_s[i]  +model.mwh_veh[i]   >= model.HorizonDemand[i] 
 model.SysEnergy = Constraint(model.hh_periods,rule=SysEnergy)
 
 ##Regulation up Reserve Requirement
