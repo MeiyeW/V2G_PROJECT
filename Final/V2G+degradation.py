@@ -1,19 +1,22 @@
 from __future__ import division
-import datetime as dt
+import datetime
 import matplotlib.pyplot as plt
 import cPickle as pickle
 import numpy as np
 import v2gsim
 import pandas as pd
+import v2gsim.battery_degradation.CapacityLoss
 
-data_name2='iteration1_version2'
-data_name3='iteration1_version3_regupregdown120'
-
+data_name = 'iteration1_correct'
+data_name2='iteration2_correct_testCap'
 # ### Require gurobi or CPLEX #####
 # Create a project and initialize it with some itineraries
-project = v2gsim.model.Project()
+project = v2gsim.model.Project(timestep=1)
 project = v2gsim.itinerary.from_excel(project, '../data/NHTS/California.xlsx')
 project = v2gsim.itinerary.copy_append(project, nb_of_days_to_add=2)
+##==========================Degeadation===============================
+# Create a detailed power train model
+car_model = v2gsim.driving.detailed.init_model.load_powertrain('../v2gsim/driving/detailed/data.xlsx')
 
 # This function from the itinerary module return all the vehicles that
 # start and end their day at the same location (e.g. home)
@@ -48,12 +51,37 @@ v2gsim.core.initialize_SOC(project, nb_iteration=2)
 # Assign a basic result function to save power demand
 for vehicle in project.vehicles:
     vehicle.result_function = v2gsim.post_simulation.netload_optimization.save_vehicle_state_for_optimization
+##==============    Add car model
+    vehicle.car_model = car_model
+    vehicle.result_function = v2gsim.result.save_detailed_vehicle_state
+
+##================   Assign drivecycles to all driving activities
+v2gsim.driving.drivecycle.generator.assign_EPA_cycle(project)
 
 
 # Launch the simulation
-v2gsim.core.run(project, date_from=project.date + dt.timedelta(days=1),
-                date_to=project.date + dt.timedelta(days=2),
+v2gsim.core.run(project, date_from=project.date + datetime.timedelta(days=1),
+                date_to=project.date + datetime.timedelta(days=2),
                 reset_charging_station=False)
+
+
+# input climate data
+radiation = open('../data/climate/radm.txt', 'r+')
+r = radiation.readlines()
+radH = []
+for i in range(len(r)):
+	for k in range(0,3600):
+		radH.append(float(r[i]))
+
+amtem = open('../data/climate/temm.txt', 'r+')
+t = amtem.readlines()
+ambientT = []
+for i in range(len(t)):
+	for k in range(0,3600):
+		ambientT.append(float(t[i]))
+
+# Call battery degradation calculation function
+v2gsim.battery_degradation.CapacityLoss.bd(project.vehicles, radH, ambientT, days=1)
 
 
 # Look at the results
@@ -61,8 +89,8 @@ total_power_demand = v2gsim.post_simulation.result.total_power_demand(project)
 
 # Optimization
 myopti = v2gsim.post_simulation.netload_optimization.CentralOptimization(project, 10,
-                                                                         project.date + dt.timedelta(days=1),
-                                                                         project.date + dt.timedelta(days=2),
+                                                                         project.date + datetime.timedelta(days=1),
+                                                                         project.date + datetime.timedelta(days=2),
                                                                          minimum_SOC=0.1, maximum_SOC=0.95)
 
 
@@ -70,18 +98,26 @@ myopti = v2gsim.post_simulation.netload_optimization.CentralOptimization(project
 load = pd.read_csv('../data/netload/20200801CAISO.csv',header=0)
 
 #CAISO1819: netload in the unit of MW
-startday = dt.datetime(2020, 8, 1)#iterate through 1 day per time
-load['date_time'] = [dt.datetime.strptime(x,"%m/%d/%y %H:%M") for x in load['date_time']]
+startday = datetime.datetime(2020, 8, 1)#iterate through 1 day per time
+
+load['date_time'] = [datetime.datetime.strptime(x,"%m/%d/%y %H:%M") for x in load['date_time']]
 load=load.set_index(load['date_time'])
 load=load.drop(columns='date_time')
 
 # ####################################### add the component of loop around day
-load = pd.DataFrame(load[startday: startday +dt.timedelta(days=1)]['netload'])
-vehCap=pd.read_csv('../data/vehicle/VehiclesCap'+data_name2+'.csv',header=0)
+load = pd.DataFrame(load[startday: startday +datetime.timedelta(days=1)]['netload'])
+vehCap=pd.read_csv('../data/vehicle/VehiclesCap'+data_name+'.csv',header=0)
 vehCap=vehCap.set_index(load[:25].index)
 #iteration1
-pr=pd.read_csv('../data/price/price'+data_name2+'.csv',header=0)
+pr=pd.read_csv('../data/price/price'+data_name+'.csv',header=0)
 pr=pr[:25].set_index(load[:25].index)
 ########## put into model already
-myresult= myopti.solve(project, load * 1000000,1500000, price=pr, vehCap=vehCap*1000000, peak_shaving='economic', SOC_margin=0.05)# convert unit from MW to W
-myresult.to_csv('../data/vehicle/VehiclesCap_V2G_'+data_name3+'.csv',index=False)
+myresult= myopti.solve(project, load * 1000000,1500000, price=pr, vehCap=vehCap, peak_shaving='economic', SOC_margin=0.05)
+
+print(myresult)
+# total_power_demand['total']
+# myresult,model=myresult 
+# # myresult['vehicle_before'] 
+# # myresult['vehicle_after']) *(1500000 / len(project.vehicles)) / (1000 * 1000) 
+
+myresult.to_csv('../data/vehicle/VehiclesCap_V2G_'+data_name2+'.csv',index=False)
