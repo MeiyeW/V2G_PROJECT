@@ -1,4 +1,4 @@
-# run both UCModel.py and UCexecution.py in the terminal.
+# run both UCexecution.py in the terminal.
 # UCModel.py: Segment A is for data setup, segment B is the optimization model
 # UCexucetion.py: Segment C runs UC problem and post process result.
 
@@ -14,15 +14,20 @@ import numpy as np
 
 ######====== write data.dat file ======########
 # data.dat file is the data files for loading data into optimization model with pyomo
-def writeDatFile(df_gen,df_solar_cap,df_solar_cons,df_wind_cap,df_wind_cons,df_veh_cap,df_load,SimDays,SimHours,HorizonHours,regup_margin,regdown_margin,data_name):
+def writeDatFile(df_gen,df_solar_cap,df_solar_cons,df_wind_cap,df_wind_cons,df_veh_cap,df_load,df_hydro,SimDays,SimHours,HorizonHours,regup_margin,regdown_margin,data_name,batteryCost):
     with open(''+str(data_name)+'.dat', 'w') as f:
-
     # generators set  
         f.write('set Generators :=\n')
         for gen in range(0,len(df_gen)):
             unit_name = df_gen.loc[gen,'name']
             unit_name = unit_name.replace(' ','_')
             f.write(unit_name + ' ')
+        f.write(';\n\n')
+
+    # Hydro Set
+        f.write('set Hydro :=\n')
+        unit_name = 'hydro'
+        f.write(unit_name + ' ')
         f.write(';\n\n')
 
     # wind set  
@@ -56,6 +61,9 @@ def writeDatFile(df_gen,df_solar_cap,df_solar_cons,df_wind_cap,df_wind_cons,df_v
         f.write('param regdown_margin := %0.3f;' % regdown_margin)
         f.write('\n\n')
 
+    ####### vehicle battery 
+        f.write('param veh_batteryCost := %0.3f;' % batteryCost)
+        f.write('\n\n')
 
     ####### create parameter matrix for generators
         f.write('param:' + '\t')
@@ -72,7 +80,25 @@ def writeDatFile(df_gen,df_solar_cap,df_solar_cons,df_wind_cap,df_wind_cons,df_v
                 else:
                     f.write(str((df_gen.loc[i,c])) + '\t')               
             f.write('\n')
-        f.write(';\n\n')     
+        f.write(';\n\n')  
+     
+
+    ####### create parameter matrix for hydro generators
+        f.write('param:' + '\t')
+        for c in df_hydro.columns:
+            if c != 'name':
+                f.write(c + '\t')
+        f.write(':=\n\n')
+        for i in range(0,len(df_hydro)):    
+            for c in df_hydro.columns:
+                if c == 'name':
+                    unit_name = df_hydro.loc[i,'name']
+                    unit_name = unit_name.replace(' ','_')
+                    f.write(unit_name + '\t')  
+                else:
+                    f.write(str((df_hydro.loc[i,c])) + '\t')               
+            f.write('\n')
+        f.write(';\n\n')   
 
     ####### create parameter matrix for wind generators
         f.write('param:' + '\t')
@@ -107,11 +133,6 @@ def writeDatFile(df_gen,df_solar_cap,df_solar_cons,df_wind_cap,df_wind_cons,df_v
                     f.write(str((df_solar_cons.loc[i,c])) + '\t')               
             f.write('\n')
         f.write(';\n\n') 
-
-    # ####### create parameter matrix for vehicles
-    #  f.write('param:'+'\t'+'var_veh:='+'\n')
-    #     f.write(0.2 + ' ') # var_veh
-    #     f.write(';\n\n')
 
     ####### Hourly timeseries (load)
         # load (hourly)
@@ -151,7 +172,7 @@ def writeDatFile(df_gen,df_solar_cap,df_solar_cons,df_wind_cap,df_wind_cons,df_v
             f.write('\n')
         f.write(';\n\n')
 
-    print ('Complete:',data_name)
+    # print ('Complete:',data_name)
 
 
 # creating optimization with pyomo
@@ -160,7 +181,9 @@ model = AbstractModel()
 model.Wind=Set()
 model.Solar=Set()
 model.Vehicle=Set()
+model.Hydro=Set()
 model.Generators = Set()
+
 
 ######===== Parameters/initial_conditions to run simulation ======####### 
 # Full range of time series information
@@ -184,6 +207,7 @@ model.HorizonDemand = Param(model.hh_periods,within=NonNegativeReals,initialize=
 model.regup_margin= Param(within=NonNegativeReals)
 model.regdown_margin= Param(within=NonNegativeReals) 
 
+
 ##Initial conditions
 model.ini_on = Param(model.Generators, within=Binary, initialize=0,mutable=True)  
 model.ini_mwh = Param(model.Generators,initialize=0,mutable=True)
@@ -205,8 +229,8 @@ model.st_cost = Param(model.Generators)
 model.ramp  = Param(model.Generators)
 #Minimun up time
 model.minup = Param(model.Generators)
-#regulation eligibility
-model.regelig = Param(model.Generators)
+# #regulation eligibility
+# model.regelig = Param(model.Generators)
 #regulation cost
 model.regcost = Param(model.Generators)
 
@@ -229,6 +253,53 @@ model.switch = Var(model.Generators,model.HH_periods, within=Binary,initialize=0
 
 #Amount of non served energy offered by an unit in each hour
 model.nse = Var(model.HH_periods, within=NonNegativeReals,initialize=0)
+
+##########===Parameters for hydro
+
+
+##Initial conditions
+model.ini_on_h = Param(model.Hydro, within=Binary, initialize=0,mutable=True)  
+model.ini_mwh_h = Param(model.Hydro,initialize=0,mutable=True)
+
+#####==== Parameters for dispatchable resources ===####
+#Max capacity
+model.maxcap_h = Param(model.Hydro)
+#Min capacity
+model.mincap_h = Param(model.Hydro)
+#operational cost 
+model.opcost_h = Param(model.Hydro)
+#Variable O&M
+model.var_om_h = Param(model.Hydro)
+#Variable O&M
+model.fix_om_h = Param(model.Hydro)
+#Start cost
+model.st_cost_h = Param(model.Hydro)
+#Ramp rate: RL
+model.ramp_h  = Param(model.Hydro)
+#Minimun up- time
+model.minup_h = Param(model.Hydro)
+# #regulation eligibility
+# model.regelig_h = Param(model.Generators)
+#regulation cost
+model.regcost_h = Param(model.Hydro)
+
+
+#####=======================Decision variables for dispatchable resources======================########
+##Amount of day-ahead energy generated by each generator at each hour
+model.mwh_h = Var(model.HH_periods, within=NonNegativeReals,initialize=0)
+
+##Amount of day-ahead capacity for regulation up by each generator at each hour
+model.regup_h = Var(model.HH_periods, within=NonNegativeReals,initialize=0)
+
+##Amount of day-ahead capacity for regulation down by each generator at each hour
+model.regdown_h = Var(model.HH_periods, within=NonNegativeReals,initialize=0)
+
+#1 if unit is on in hour i, otherwise 0
+model.on_h = Var(model.HH_periods, within=Binary, initialize=0)
+
+#1 if unit is switching on in hour i, otherwise 0
+model.switch_h = Var(model.HH_periods, within=Binary,initialize=0)
+
 
 #####==== Parameters for solar ===####
 #Max capacity
@@ -297,16 +368,12 @@ model.on_w = Var(model.HH_periods, within=Binary, initialize=0)
 #1 if unit is switching on in hour i, otherwise 0
 model.switch_w = Var(model.HH_periods, within=Binary,initialize=0)
 
-#Amount of non served energy offered by an unit in each hour
-# model.nse_w = Var(model.HH_periods, within=NonNegativeReals,initialize=0)
-
-
 ######===========Parameters for Vehicles=============================###
 #vehicle generation
+model.veh_batteryCost=Param(within=NonNegativeReals)
 model.gen_capacity_veh=Param(model.SH_periods)
 model.regup_capacity_veh=Param(model.SH_periods)
 model.regdown_capacity_veh=Param(model.SH_periods) 
-# model.var_veh=Param(model.HH_periods) 
 
 #####=======================Decision variables for vehicles======================########
 #Vehicle:
@@ -318,23 +385,17 @@ def SysCost(model):
     operational = sum(model.mwh[j,i]*(model.opcost[j]+model.var_om[j]) for i in model.hh_periods for j in model.Generators)
     + sum(model.mwh_w[i]*(model.opcost_w[j]+model.var_om_w[j]) for i in model.hh_periods for j in model.Wind)
     + sum(model.mwh_s[i]*(model.opcost_s[j]+model.var_om_s[j]) for i in model.hh_periods for j in model.Solar)
-    + sum(model.mwh_veh[i]*(120) for i in model.hh_periods ) # update battery degradtaion cost 120$/MWh
-    # sum(model.mwh_veh[j,i]*(model.var_veh[j]) for i in model.hh_periods for j in model.Vehicle)
+    + sum(model.mwh_h[i]*(model.opcost_h[j]+model.var_om_h[j]) for i in model.hh_periods for j in model.Hydro)
+    + sum(model.mwh_veh[i]*(model.veh_batteryCost) for i in model.hh_periods ) # update battery degradtaion cost 120$/MWh
 
     starts = sum(model.st_cost[j]*model.switch[j,i] for i in model.hh_periods for j in model.Generators)
     
     regulationup_capacity = sum(model.regup[j,i]*model.regcost[j]  for i in model.hh_periods for j in model.Generators)
-    # sum(model.regup_veh[j,i]*(model.var_veh[j]) for i in model.hh_periods for j in model.Vehicle)
-    + sum(model.regup_veh[i]*(120) for i in model.hh_periods )# update battery degradtaion cost
+    + sum(model.regup_veh[i]*(model.veh_batteryCost) for i in model.hh_periods )# update battery degradtaion cost
 
     regulationdown_capacity = sum(model.regdown[j,i]*model.regcost[j] for i in model.hh_periods for j in model.Generators)
-    # sum(model.regdown_veh[j,i]*(model.var_veh[j]) for i in model.hh_periods for j in model.Vehicle)
-    + sum(model.regdown_veh[i]*(120) for i in model.hh_periods ) # update battery degradtaion cost
+    + sum(model.regdown_veh[i]*(model.veh_batteryCost) for i in model.hh_periods ) # update battery degradtaion cost
 
-    # nonserved = sum(model.nse[i]*20 for i in model.hh_periods)
-    #20 is the cost of non-served energy [$/MWh], can be changed
-    #10 is the cost of non-served energy for wind and solar[$/MWh], can be changed
-    
     return operational +starts +regulationup_capacity + regulationdown_capacity #+ nonserved 
 model.SystemCost = Objective(rule=SysCost, sense=minimize)
 
@@ -343,6 +404,18 @@ model.SystemCost = Objective(rule=SysCost, sense=minimize)
 def SwitchCon(model,j,i):
     return model.switch[j,i] >= 1 - model.on[j,i-1] - (1 - model.on[j,i])
 model.SwitchConstraint = Constraint(model.Generators,model.hh_periods,rule = SwitchCon)
+
+def SwitchCon_s(model,i):
+    return model.switch_s[i] >= 1 - model.on_s[i-1] - (1 - model.on_s[i])
+model.SwitchConstraint_s = Constraint(model.hh_periods,rule = SwitchCon_s)
+
+def SwitchCon_w(model,i):
+    return model.switch_w[i] >= 1 - model.on_w[i-1] - (1 - model.on_w[i])
+model.SwitchConstraint_w = Constraint(model.hh_periods,rule = SwitchCon_w)
+
+def SwitchCon_h(model,i):
+    return model.switch_h[i] >= 1 - model.on_h[i-1] - (1 - model.on_h[i])
+model.SwitchConstraint_h = Constraint(model.hh_periods,rule = SwitchCon_h)
 
 
 ######========== Up/Down Time Constraint =========#############
@@ -353,14 +426,6 @@ def MinUp(model,j,i,k):
     else: 
         return Constraint.Skip
 model.MinimumUp = Constraint(model.Generators,model.HH_periods,model.HH_periods,rule=MinUp)
-
-# ##Min Down time
-# def MinDown(model,j,i,k):
-#    if i > 0 and k > i and k < min(i+model.mindn[j]-1,model.HorizonHours):
-#        return model.on[j,i-1] - model.on[j,i] <= 1 - model.on[j,k]
-#    else:
-#        return Constraint.Skip
-# model.MinimumDown = Constraint(model.Generators,model.HH_periods,model.HH_periods,rule=MinDown)
 
 ######==========Ramp Rate Constraints =========#############
 def Ramp1(model,j,i):
@@ -381,6 +446,12 @@ def Ramp1_s(model,j,i):
     return a - b <= model.ramp_s[j]* model.on_s[i]
 model.RampCon1_s = Constraint(model.Solar,model.ramp_periods,rule=Ramp1_s)
 
+def Ramp1_h(model,j,i):
+    a = model.mwh_h[i]
+    b = model.mwh_h[i-1]
+    return a - b <= model.ramp_h[j]* model.on_h[i]
+model.RampCon1_h = Constraint(model.Hydro,model.ramp_periods,rule=Ramp1_h)
+
 def Ramp2(model,j,i):
     a = model.mwh[j,i]
     b = model.mwh[j,i-1]
@@ -399,6 +470,12 @@ def Ramp2_s(model,j,i):
     return b - a <= model.ramp_s[j]* model.on_s[i-1]
 model.RampCon2_s = Constraint(model.Solar,model.ramp_periods,rule=Ramp2_s)
 
+def Ramp2_h(model,j,i):
+    a = model.mwh_h[i]
+    b = model.mwh_h[i-1]
+    return b - a <= model.ramp_h[j]* model.on_h[i-1]
+model.RampCon2_h = Constraint(model.Hydro,model.ramp_periods,rule=Ramp2_h)
+
 ######=========== Capacity Constraints ============##########
 #Constraints for Max & Min Capacity of dispatchable resources
 def MaxC(model,j,i):
@@ -413,13 +490,17 @@ def MaxC_s(model,i):
     return model.mwh_s[i]  <= model.on_s[i] * model.maxcap_s[i] 
 model.MaxCap_s= Constraint(model.hh_periods,rule=MaxC_s)
 
-def MinC(model,j,i):
-    return model.mwh[j,i] >= model.on[j,i] * model.mincap[j]
-model.MinCap= Constraint(model.Generators,model.hh_periods,rule=MinC)
+def MaxC_h(model,j,i):
+    return model.mwh_h[i]  <= model.on_h[i] * model.maxcap_h[j] 
+model.MaxCap_h= Constraint(model.Hydro,model.hh_periods,rule=MaxC_h)
 
 def MaxC_veh(model,i):
     return model.mwh_veh[i]  <= model.gen_capacity_veh[i] 
 model.MaxCap_veh= Constraint(model.hh_periods,rule=MaxC_veh)
+
+def MinC(model,j,i):
+    return model.mwh[j,i] >= model.on[j,i] * model.mincap[j]
+model.MinCap= Constraint(model.Generators,model.hh_periods,rule=MinC)
 
 def MaxRegUp_veh(model,i):
     return model.regup_veh[i]  <= model.regup_capacity_veh[i] 
@@ -433,9 +514,9 @@ model.MaxRegDown_veh= Constraint(model.hh_periods,rule=MaxRegDown_veh)
 ######===================Energy, regulation capacity and zero-sum constraints ==================########
 
 ##System Energy Requirement
-def SysEnergy(model,i):
-    return sum(model.mwh[j,i] for j in model.Generators)  +model.mwh_w[i]+model.mwh_s[i]  +model.mwh_veh[i]   >= model.HorizonDemand[i] 
-model.SysEnergy = Constraint(model.hh_periods,rule=SysEnergy)
+def SysEnergy(model,j,i):
+    return sum(model.mwh[j,i] for j in model.Generators)  +model.mwh_w[i]+model.mwh_s[i]  +model.mwh_veh[i] + model.mwh_h[i]   >= model.HorizonDemand[i] 
+model.SysEnergy = Constraint(model.Generators,model.hh_periods,rule=SysEnergy)
 
 ##Regulation up Reserve Requirement
 def RegulationUp(model,i):
@@ -463,143 +544,214 @@ def ZeroSum(model,j,i):
     return model.mwh[j,i] + model.regup[j,i] - model.regdown[j,i]<= model.maxcap[j]
 model.ZeroSumConstraint=Constraint(model.Generators,model.hh_periods,rule=ZeroSum)
 
-# def readSolutionResult(instance,resultLength,day):
-#     #Space to store results
-#     on=[]
-#     switch=[]
-#     mwh=[]
-#     regup=[]
-#     regdown=[]
-#     mwh_w=[]
-#     regup_w=[]
-#     regdown_w=[]
-#     mwh_s=[]
-#     regup_s=[]
-#     regdown_s=[]
-#     mwh_veh=[]
-#     regup_veh=[]
-#     regdown_veh=[]
-#     nse=[]
+def readSolutionResult(opt,instance,K,myresult,df_gen,df_solar_cons,df_wind_cons,df_hydro,df_load,veh_batteryCost):
+ ## Store result
+    # Space to store results
+    mwh=[]
+    regup=[]
+    regdown=[]
+    mwh_w=[]
+    regup_w=[]
+    regdown_w=[]
+    mwh_s=[]
+    regup_s=[]
+    regdown_s=[]
+    mwh_veh=[]
+    regup_veh=[]
+    regdown_veh=[]
+    mwh_h=[]
+    regup_h=[]
+    regdown_h=[]
+      
+    for i in K:
+            instance.HorizonDemand[i] = instance.SimDemand[i]
+    opt.options['TimeLimit'] = 800
+    # results = opt.solve(model, load_solutions=False, tee=True)
+    result = opt.solve(instance,load_solutions=False) ##,tee=True,to check number of variables ##,load_solutions=False,keepfiles=True
+    instance.solutions.load_from(result)  
+    # instance.display()  
+    ##Read each value of the solution 
+    date=1
+    for v in instance.component_objects(Var, active=True):
+        varobject = getattr(instance, str(v))
+        a=str(v)
     
-#     for v in instance.component_objects(Var, active=True):
-#         varobject = getattr(instance, str(v))
-#         a=str(v)
+        if a=='mwh':
+            for index in varobject:
+                if int(index[1]>0 and index[1]<26):
+                    mwh.append((index[0], date,index[1]+((date-1)*24),varobject[index].value))
+                    # print ("Generator", index, v[index].value)   
+                    # print('Generator',instance.mwh.get_values())                                           
+    
+        if a=='regup':    
+            for index in varobject:
+                if int(index[1]>0 and index[1]<26):
+                    regup.append((index[0],date,index[1]+((date-1)*24),varobject[index].value))
+                    # print ("   ", index, v[index].value)
+
+        if a=='regdown':    
+            for index in varobject:
+                if int(index[1]>0 and index[1]<26):
+                    regdown.append((index[0],date,index[1]+((date-1)*24),varobject[index].value))
+                    # print ("   ", index, v[index].value)
         
-#         if a=='mwh':
-#             for index in varobject:
-#                 if int(index[1]>0 and index[1]<resultLength):
-#                     mwh.append((index[0], day,index[1]+((day-1)*24),varobject[index].value))
-#                     # print ("Generator", index, v[index].value)   
-#                     # print('Generator',instance.mwh.get_values())                                           
+        if a=='mwh_w':
+            for index in varobject:
+                if int(index>0 and index<26):
+                    mwh_w.append((index, date,index+((date-1)*24),varobject[index].value))
+                    # print ("Wind", index, v[index].value)                                                  
+    
+        if a=='regup_w':    
+            for index in varobject:
+                if int(index>0 and index<26):
+                    regup_w.append((index,date,index+((date-1)*24),varobject[index].value))
+
+        if a=='regdown_w':    
+            for index in varobject:
+                if int(index>0 and index<26):
+                    regdown_w.append((index,date,index+((date-1)*24),varobject[index].value))
         
-#         if a=='regup':    
-#             for index in varobject:
-#                 if int(index[1]>0 and index[1]<resultLength):
-#                     regup.append((index[0],day,index[1]+((day-1)*24),varobject[index].value))
-#                     # print ("   ", index, v[index].value)
+        if a=='mwh_s':
+            for index in varobject:
+                if int(index>0 and index<26):
+                    mwh_s.append((index, date,index+((date-1)*24),varobject[index].value))
+                    # print ("Solar", index, v[index].value)                                                  
+    
+        if a=='regup_s':    
+            for index in varobject:
+                if int(index>0 and index<26):
+                    regup_s.append((index,date,index+((date-1)*24),varobject[index].value))
 
-#         if a=='regdown':    
-#             for index in varobject:
-#                 if int(index[1]>0 and index[1]<resultLength):
-#                     regdown.append((index[0],day,index[1]+((day-1)*24),varobject[index].value))
-#                     # print ("   ", index, v[index].value)
+        if a=='regdown_s':    
+            for index in varobject:
+                if int(index>0 and index<26):
+                    regdown_s.append((index,date,index+((date-1)*24),varobject[index].value))
+        if a=='mwh_veh':
+            for index in varobject:
+                if int(index>0 and index<26):
+                    mwh_veh.append((index, date,index+((date-1)*24),varobject[index].value))
+                    # print ("Vehicle", index, v[index].value)                                                  
+    
+        if a=='regup_veh':    
+            for index in varobject:
+                if int(index>0 and index<26):
+                    regup_veh.append((index,date,index+((date-1)*24),varobject[index].value))
+
+        if a=='regdown_veh':    
+            for index in varobject:
+                if int(index>0 and index<26):
+                    regdown_veh.append((index,date,index+((date-1)*24),varobject[index].value))
         
-#         if a=='mwh_w':
-#             for index in varobject:
-#                 if int(index>0 and index<resultLength):
-#                     mwh_w.append((index, day,index+((day-1)*24),varobject[index].value))
-#                     # print ("Wind", index, v[index].value)                                                  
-        
-#         if a=='regup_w':    
-#             for index in varobject:
-#                 if int(index>0 and index<resultLength):
-#                     regup_w.append((index,day,index+((day-1)*24),varobject[index].value))
+        if a=='mwh_h':
+            for index in varobject:
+                if int(index>0 and index<26):
+                    mwh_h.append((index, date,index+((date-1)*24),varobject[index].value))
+                    # print ("Vehicle", index, v[index].value)                                                  
+    
+        if a=='regup_h':    
+            for index in varobject:
+                if int(index>0 and index<26):
+                    regup_h.append((index,date,index+((date-1)*24),varobject[index].value))
 
-#         if a=='regdown_w':    
-#             for index in varobject:
-#                 if int(index>0 and index<resultLength):
-#                     regdown_w.append((index,day,index+((day-1)*24),varobject[index].value))
-        
-#         if a=='mwh_s':
-#             for index in varobject:
-#                 if int(index>0 and index<resultLength):
-#                     print ("Solar", index,day, index+((day-1)*24),varobject[index].value)                                                  
-#                     mwh_s.append([index, day,index+((day-1)*24),varobject[index].value])
-#                     print ("Solar", mwh_s)                                                  
-        
-#         if a=='regup_s':    
-#             for index in varobject:
-#                 if int(index>0 and index<resultLength):
-#                     regup_s.append((index,day,index+((day-1)*24),varobject[index].value))
+        if a=='regdown_h':    
+            for index in varobject:
+                if int(index>0 and index<26):
+                    regdown_h.append((index,date,index+((date-1)*24),varobject[index].value))
+            
+    
+    regup_pd=pd.DataFrame(regup,columns=('Generator','Day','Hour','Value'))
+    regdown_pd=pd.DataFrame(regdown,columns=('Generator','Day','Hour','Value'))  
+    mwh_pd=pd.DataFrame(mwh,columns=('Generator','Day','Hour','Generation'))
+    mwh_pd['Reg Up']=regup_pd['Value']
+    mwh_pd['Reg Down']=regdown_pd['Value']
 
-#         if a=='regdown_s':    
-#             for index in varobject:
-#                 if int(index>0 and index<resultLength):
-#                     regdown_s.append((index,day,index+((day-1)*24),varobject[index].value))
-#         if a=='mwh_veh':
-#             for index in varobject:
-#                 if int(index>0 and index<resultLength):
-#                     # print ("Vehicle", index,day, index+((day-1)*24),varobject[index].value)                                                  
-#                     mwh_veh.append([index, day,index+((day-1)*24),varobject[index].value])
-#                     print ("Vehicle", mwh_veh)                                                  
-        
-#         if a=='regup_veh':    
-#             for index in varobject:
-#                 if int(index>0 and index<resultLength):
-#                     regup_veh.append((index,day,index+((day-1)*24),varobject[index].value))
+    regup_w_pd=pd.DataFrame(regup_w,columns=('Generator','Day','Hour','Value'))
+    regdown_w_pd=pd.DataFrame(regdown_w,columns=('Generator','Day','Hour','Value'))  
+    mwh_w_pd=pd.DataFrame(mwh_w,columns=('Generator','Day','Hour','Generation'))
+    mwh_w_pd['Generator']='wind'
+    mwh_w_pd['Reg Up']=regup_w_pd['Value']
+    mwh_w_pd['Reg Down']=regdown_w_pd['Value']
 
-#         if a=='regdown_veh':    
-#             for index in varobject:
-#                 if int(index>0 and index<resultLength):
-#                     regdown_veh.append((index,day,index+((day-1)*24),varobject[index].value))
-                                
-#     #         # if a=='on':        
-#     #         #     for index in varobject:
-#     #         #         if int(index[1]>0 and index[1]<25):
-#     #         #             on.append((index[0],day,index[1]+((day-1)*24),varobject[index].value))
+    regup_s_pd=pd.DataFrame(regup_s,columns=('Generator','Day','Hour','Value'))
+    regdown_s_pd=pd.DataFrame(regdown_s,columns=('Generator','Day','Hour','Value'))  
+    mwh_s_pd=pd.DataFrame(mwh_s,columns=('Generator','Day','Hour','Generation'))
+    mwh_s_pd['Generator']='solar'
+    mwh_s_pd['Reg Up']=regup_s_pd['Value']
+    mwh_s_pd['Reg Down']=regdown_s_pd['Value']
 
-#     #         # if a=='switch':  
-#     #         #     for index in varobject:
-#     #         #         if int(index[1]>0 and index[1]<25):
-#     #         #             switch.append((index[0],day,index[1]+((day-1)*24),varobject[index].value))
+    regup_veh_pd=pd.DataFrame(regup_veh,columns=('Generator','Day','Hour','Value'))
+    regdown_veh_pd=pd.DataFrame(regdown_veh,columns=('Generator','Day','Hour','Value'))  
+    mwh_veh_pd=pd.DataFrame(mwh_veh,columns=('Generator','Day','Hour','gen_capacity_veh'))
+    mwh_veh_pd['Generator']='vehicle'
+    mwh_veh_pd['regup_capacity_veh']=regup_veh_pd['Value']
+    mwh_veh_pd['regdown_capacity_veh']=regdown_veh_pd['Value']
 
-#     #         # if a=='nse':    
-#     #         #     for index in varobject:
-#     #         #         if int(index[1]>0 and index[1]<25):
-#     #         #             nse.append((index[0],day,index[1]+((day-1)*24),varobject[index].value))
-#     #     print(day)
-#     #     print(str(datetime.now()))
+    regup_h_pd=pd.DataFrame(regup_h,columns=('Generator','Day','Hour','Value'))
+    regdown_h_pd=pd.DataFrame(regdown_h,columns=('Generator','Day','Hour','Value'))  
+    mwh_h_pd=pd.DataFrame(mwh_h,columns=('Generator','Day','Hour','Generation'))
+    mwh_h_pd['Generator']='hydro'
+    mwh_h_pd['Reg Up']=regup_h_pd['Value']
+    mwh_h_pd['Reg Down']=regdown_h_pd['Value']
+    # print(mwh_h_pd)
 
-#         regup_pd=pd.DataFrame(regup,columns=('Generator','Day','Hour','Value'))
-#         regdown_pd=pd.DataFrame(regdown,columns=('Generator','Day','Hour','Value'))  
-#         mwh_pd=pd.DataFrame(mwh,columns=('Generator','Day','Hour','Generation'))
-#         mwh_pd['Reg Up']=regup_pd['Value']
-#         mwh_pd['Reg Down']=regdown_pd['Value']
+    # # get the Marginal Clearing Price for energy, frequency regulation up, and frequency regulation down
+    mwh_pd=pd.concat([mwh_pd,mwh_w_pd],axis=0)
+    mwh_pd=pd.concat([mwh_pd,mwh_s_pd],axis=0)
+    mwh_veh=mwh_veh_pd.rename(columns={'gen_capacity_veh':'Generation','regup_capacity_veh':'Reg Up','regdown_capacity_veh':'Reg Down'})
+    mwh_pd=pd.concat([mwh_pd,mwh_veh],axis=0)
+    mwh_pd=pd.concat([mwh_pd,mwh_h_pd],axis=0)
 
-#         regup_w_pd=pd.DataFrame(regup_w,columns=('Generator','Day','Hour','Value'))
-#         regdown_w_pd=pd.DataFrame(regdown_w,columns=('Generator','Day','Hour','Value'))  
-#         mwh_w_pd=pd.DataFrame(mwh_w,columns=('Generator','Day','Hour','Generation'))
-#         mwh_w_pd['Generator']='wind'
-#         mwh_w_pd['Reg Up']=regup_w_pd['Value']
-#         mwh_w_pd['Reg Down']=regdown_w_pd['Value']
+    # mwh_veh_pd[['gen_capacity_veh','regup_capacity_veh','regdown_capacity_veh']].to_csv('../data/vehicle/VehiclesCap_'+data_name2+'.csv',index=False)
+    # mwh_pd.to_csv('../data/generator/GeneratorResult'+data_name2+'.csv',index=False)
+    mwh_pd_gr=mwh_pd.groupby(mwh_pd['Hour'])['Generation','Reg Up','Reg Down'].sum()
+    # df_load = pd.read_csv('../data/netload/20200801CAISO.csv',header=0)[:26]
+    mwh_pd_gr['load']=df_load['netload']#myresult['netload']+
+    mwh_pd_gr['Generation/Load']=mwh_pd_gr['Generation']/mwh_pd_gr['load']
+    mwh_pd_gr['Regup/Load']=mwh_pd_gr['Reg Up']/mwh_pd_gr['load']
+    mwh_pd_gr['RegDown/Load']=mwh_pd_gr['Reg Down']/mwh_pd_gr['load']
+    # print(mwh_s_pd.groupby(mwh_s_pd['Hour'])['Generation','Reg Up','Reg Down'].sum())
+    # print(mwh_w_pd.groupby(mwh_s_pd['Hour'])['Generation','Reg Up','Reg Down'].sum())
+    # print(mwh_veh_pd.groupby(mwh_veh_pd['Hour']).sum())
 
-#         regup_s_pd=pd.DataFrame(regup_s,columns=('Generator','Day','Hour','Value'))
-#         regdown_s_pd=pd.DataFrame(regdown_s,columns=('Generator','Day','Hour','Value'))  
-#         mwh_s_pd=pd.DataFrame(mwh_s,columns=('Generator','Day','Hour','Generation'))
-#         mwh_s_pd['Generator']='solar'
-#         mwh_s_pd['Reg Up']=regup_s_pd['Value']
-#         mwh_s_pd['Reg Down']=regdown_s_pd['Value']
+    # generate the cost dataframe for each generator
+    df_gen_param = df_gen
+    df_solar_cons=df_solar_cons.rename(columns={'opcost_s':'opcost','var_om_s':'var_om','regcost_s':'regcost'})
+    df_wind_cons=df_wind_cons.rename(columns={'opcost_w':'opcost','var_om_w':'var_om','regcost_w':'regcost'})
+    df_hydro_cons=df_hydro.rename(columns={'opcost_h':'opcost','var_om_h':'var_om','regcost_h':'regcost'})
+    cost_pd=pd.concat([df_gen_param,df_solar_cons],axis=0,sort=False)
+    cost_pd=pd.concat([cost_pd,df_wind_cons],axis=0,sort=False)
+    cost_pd=pd.concat([cost_pd,df_hydro_cons],axis=0,sort=False)
+    cost_pd=cost_pd[['name','opcost','var_om','regcost']]
+    cost_pd=cost_pd.append(pd.DataFrame([['vehicle',veh_batteryCost,0,veh_batteryCost]], columns=['name','opcost','var_om','regcost']))
+    cost_pd["cost_e"]=cost_pd["opcost"]+cost_pd["var_om"]
+    cost_pd["cost_fre_d"]=cost_pd["regcost"]
+    cost_pd["cost_fre_u"]=cost_pd["regcost"]
 
-#         regup_veh_pd=pd.DataFrame(regup_veh,columns=('Generator','Day','Hour','Value'))
-#         regdown_veh_pd=pd.DataFrame(regdown_veh,columns=('Generator','Day','Hour','Value'))  
-#         mwh_veh_pd=pd.DataFrame(mwh_veh,columns=('Generator','Day','Hour','gen_capacity_veh'))
-#         mwh_veh_pd['Generator']='vehicle'
-#         mwh_veh_pd['regup_capacity_veh']=regup_veh_pd['Value']
-#         mwh_veh_pd['regdown_capacity_veh']=regdown_veh_pd['Value']
+    cost_pd=cost_pd[['name','cost_e','cost_fre_d','cost_fre_u']].fillna(9999)
+    # get hourly price
+    cost_pd=cost_pd.sort_values(by='name')
+    cost_pd.index=range(cost_pd.shape[0])
+    # cost_pd.to_csv('../data/price/cost_pd'+data_name2+'.csv',index=False)
+    mwh_pd=mwh_pd.sort_values(by=['Generator','Hour'])
+    mwh_pd=mwh_pd.reset_index(drop=True)
 
-#         # # get the Marginal Clearing Price for energy, frequency regulation up, and frequency regulation down
-#         mwh_pd=pd.concat([mwh_pd,mwh_w_pd],axis=0)
-#         mwh_pd=pd.concat([mwh_pd,mwh_s_pd],axis=0)
-#         mwh_veh=mwh_veh_pd.rename(columns={'gen_capacity_veh':'Generation','regup_capacity_veh':'Reg Up','regdown_capacity_veh':'Reg Down'})
-#         mwh_pd=pd.concat([mwh_pd,mwh_veh],axis=0)
-#     return mwh_veh_pd,mwh_pd
+    Hour=25
+    price=[]
+    for i in range(Hour):
+        pr_e=[]
+        pr_a=[]
+        pr_b=[]
+        pr_fre_d=[]
+        pr_fre_u=[]
+        for j in range(cost_pd.shape[0]):  
+            pr_e.append((mwh_pd.loc[j*Hour+i,'Generation']>0).astype(int)*1*cost_pd.loc[j,"cost_e"])
+            pr_fre_u.append((mwh_pd.loc[j*Hour+i,'Reg Up']>0).astype(int)*1*cost_pd.loc[j,"cost_fre_u"])
+            pr_fre_d.append((mwh_pd.loc[j*Hour+i,'Reg Down']>0).astype(int)*1*cost_pd.loc[j,"cost_fre_d"])
+        price.append((i,max(pr_e),max(pr_fre_u),max(pr_fre_d)))#
+    price_pd=pd.DataFrame(price,columns=("Hour",'pr_e','pr_fre_u','pr_fre_d'))
+
+    ###to save outputs
+    mwh_pd_gr=pd.concat([mwh_pd_gr,price_pd],axis=1,sort=False)
+    # print(mwh_pd_gr)
+    # print("complete")
+    return price_pd, mwh_veh_pd,mwh_pd#,,cost_pd

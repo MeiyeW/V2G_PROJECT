@@ -1,0 +1,2 @@
+name,maxcap_h,mincap_h,opcost_h,minup_h,ramp_h,st_cost_h,var_om_h,fix_om_h,regcost_h
+hydro,0,0,0.024078944,0,23.59813953,0,0,14130,9999

@@ -293,6 +293,7 @@ def set_fleet_mix(vehicles, mix):
     """
 
     # Calculate the number of vehicles for each model
+    
     fleetMix = mix.copy()
     fleetMix['number_of_vehicle'] = fleetMix['percentage'] * len(vehicles)
     fleetMix['number_of_vehicle'] = fleetMix['number_of_vehicle'].apply(int)

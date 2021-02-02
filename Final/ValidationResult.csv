@@ -1,0 +1,18 @@
+PlantType,Generation,Reg Up,Reg Down,percentage,,PlantType,Gwh,percente,,
+Biomass,5199747.947,0,0,0.023454448,,Biomass,5200,2.35%,,
+Coal Steam,150875,0,90525,0.00068055,,Coal Steam,151,0.07%,,
+Combined Cycle,94049303.22,13589492.84,5977829.616,0.424227192,,Combined Cycle,94049,42.42%,96596,43.57%
+Combustion Turbine,2546340.487,0.03352,0,0.011485751,,Combustion Turbine,2546,1.15%,,
+Fossil Waste,458309.3587,0,0,0.002067291,,Fossil Waste,458,0.21%,5089,2.30%
+Fuel Cell,382.83453,0,0,1.73E-06,,Fuel Cell,0,0.00%,,
+Geothermal,16230600,0,9738360,0.073211195,,Geothermal,16231,7.32%,,
+Hydro,38808936.72,0,0,0.175055058,,Hydro,38809,17.51%,,
+Landfill Gas,2437900.464,0,0,0.010996612,,Landfill Gas,2438,1.10%,,
+Municipal Solid Waste,374726.6044,0,0,0.001690275,,Municipal Solid Waste,375,0.17%,,
+Non-Fossil Waste,1168771.117,0,0,0.005271963,,Non-Fossil Waste,1169,0.53%,,
+Nuclear,19531235.74,0,0,0.088099337,,Nuclear,19531,8.81%,,
+O/G Steam,649436.4,460920.1139,0,0.002929406,,O/G Steam,649,0.29%,,
+Solar,25785325.98,0,0,0.116309596,,Solar,25785,11.63%,,
+Wind,14303711.1,0,0,0.064519598,,Wind,14304,6.45%,,
+,,,,,,,,,,
+,221695603,,,,,,,,,

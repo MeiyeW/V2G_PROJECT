@@ -43,8 +43,14 @@ def FillMissingData(df_sort):
     return df_sort_complete
 
 def CompileWindSolar(df1_complete,df2_complete,df3_complete,df4_complete,df5_complete):
+    df1_complete[df1_complete['MW'] < 0] = 0
+    df2_complete[df2_complete['MW'] < 0] = 0
+    df3_complete[df3_complete['MW'] < 0] = 0
+    df4_complete[df4_complete['MW'] < 0] = 0
+    df5_complete[df5_complete['MW'] < 0] = 0
+
     Solar=df1_complete
-    Solar['MW']=df1_complete['MW']+df3_complete['MW']+df3_complete['MW']
+    Solar['MW']=df1_complete['MW']+df3_complete['MW']+df5_complete['MW']
     Solar.index=range(8760)
     Solar=Solar.drop(['INTERVALSTARTTIME_GMT','RENEWABLE_TYPE'],axis=1)
 
@@ -64,7 +70,7 @@ df5_complete=FillMissingData(SortTimeOrder(df5))
 
 Solar,Wind=CompileWindSolar(df1_complete,df2_complete,df3_complete,df4_complete,df5_complete)
 
-# print(Solar[pd.isna(Solar['MW'])])
+# print(Solar.sum()/1000)
 # print(Wind[pd.isna(Wind['MW'])])
 
 Solar.to_csv('SolarCap.csv',index=False)

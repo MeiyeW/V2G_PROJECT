@@ -1,13 +1,13 @@
 from __future__ import division
 import datetime as dt
 import matplotlib.pyplot as plt
-import cPickle as pickle
+# import cPickle as pickle
 import numpy as np
 import v2gsim
 import pandas as pd
 
 data_name2='iteration1_version2'
-data_name3='iteration1_version3_regupregdown120'
+data_name3='iteration1_version3_regupregdown20'
 
 # ### Require gurobi or CPLEX #####
 # Create a project and initialize it with some itineraries
@@ -57,7 +57,7 @@ v2gsim.core.run(project, date_from=project.date + dt.timedelta(days=1),
 
 
 # Look at the results
-total_power_demand = v2gsim.post_simulation.result.total_power_demand(project)
+# total_power_demand = v2gsim.post_simulation.result.total_power_demand(project)
 
 # Optimization
 myopti = v2gsim.post_simulation.netload_optimization.CentralOptimization(project, 10,
@@ -82,6 +82,6 @@ vehCap=vehCap.set_index(load[:25].index)
 #iteration1
 pr=pd.read_csv('../data/price/price'+data_name2+'.csv',header=0)
 pr=pr[:25].set_index(load[:25].index)
-########## put into model already
+######### put into model already
 myresult= myopti.solve(project, load * 1000000,1500000, price=pr, vehCap=vehCap*1000000, peak_shaving='economic', SOC_margin=0.05)# convert unit from MW to W
-myresult.to_csv('../data/vehicle/VehiclesCap_V2G_'+data_name3+'.csv',index=False)
+# myresult.to_csv('../data/vehicle/VehiclesCap_V2G_'+data_name3+'.csv',index=False)
