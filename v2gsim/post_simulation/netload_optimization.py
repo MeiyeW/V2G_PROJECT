@@ -10,6 +10,8 @@ import seaborn as sns
 import v2gsim.model
 import v2gsim.result
 import datetime
+import csv
+import pickle
 
 
 class CentralOptimization(object):
@@ -30,7 +32,7 @@ class CentralOptimization(object):
         self.SOC_index_from = int((date_from - project.date).total_seconds() / project.timestep)
         self.SOC_index_to = int((date_to - project.date).total_seconds() / project.timestep)
 
-    def solve(self, project, net_load, real_number_of_vehicle, price=None, SOC_margin=0.02,
+    def solve(self, project, net_load, real_number_of_vehicle, price=None, vehCap=None,iterNumber=None, batteryCost=20, SOC_margin=0.02,
               SOC_offset=0.0, peak_shaving='peak_shaving', penalization=5, beta=None, plot=False):
         """Launch the optimization and the post_processing fucntion. Results
         and assumptions are appended to a data frame.
@@ -56,27 +58,33 @@ class CentralOptimization(object):
         self.pr_e={}
         self.pr_fre_c1={}
         self.pr_fre_c2={}
-        # self.pr_ba={}
+        self.pr_batt={}
+        self.genCap={}
+        self.regupCap={}
+        self.regdownCap={}
         self.timeindex={}
         self.re_energy_u={}
         self.re_energy_d={}
 
         # Set the variables for the optimization
         new_net_load = self.initialize_net_load(net_load, real_number_of_vehicle, project)
-        self.initialize_model(project, new_net_load, SOC_margin,SOC_offset,price)
+        self.initialize_model(project, new_net_load, SOC_margin,SOC_offset,price,vehCap,iterNumber,real_number_of_vehicle,batteryCost)
 
         # Run the optimization
         timer = time.time()
         opti_model, result = self.process(self.times, self.vehicles, self.d, self.pmax,
                                           self.pmin, self.emin, self.emax,self.efinal, 
-                                          self.pr_e,self.pr_fre_c1,self.pr_fre_c2,  self.timeindex, self.re_energy_u,self.re_energy_d,
+                                          self.pr_e,self.pr_fre_c1,self.pr_fre_c2,self.pr_batt,
+                                          self.genCap,self.regupCap,self.regdownCap,
+                                          self.timeindex, self.re_energy_u,self.re_energy_d,
                                           peak_shaving, penalization)#self.pr_ba
         timer2 = time.time()
         print('The optimization duration was ' + str((timer2 - timer) / 60) + ' minutes')
         print('')
 
         # Post process results
-        return self.post_process(project, net_load, opti_model, result, plot) , self.print_result(project,opti_model,result)
+        return self.post_process(project, net_load, opti_model, result, plot) 
+        # return self.print_result(project,opti_model,result)
     
     def print_result(self,project,model,result):
 
@@ -86,24 +94,12 @@ class CentralOptimization(object):
         charge = pandas.DataFrame()
 
         # Get the result
-
         u1 = model.u1.get_values()
-
-        ub=model.ub.get_values()
-       
         c1 = model.c1.get_values()
-        
-        cb=model.cb.get_values()
-        
         c2=model.c2.get_values()
-        
-        cb2=model.cb2.get_values()
-
         i = pandas.date_range(start=self.date_from, end=self.date_to,
                               freq=str(self.optimization_timestep) + 'T', closed='left')
-
-
-        return u1, ub, c1, cb, c2, cb2 ,i
+        return u1, c1, c2,i
 
 
 
@@ -118,10 +114,10 @@ class CentralOptimization(object):
         """
         # Make sure we are not touching the initial data
         new_net_load = net_load.copy()
-
+        # print('net_load',net_load)
         # Resample the net load
         new_net_load = new_net_load.resample(str(self.optimization_timestep) + 'T').first()
-
+        new_net_load=new_net_load.fillna(method='ffill')
         # Check against the actual lenght it should have
         diff = (len(new_net_load) -
                 int((self.date_to - self.date_from).total_seconds() / (60 * self.optimization_timestep)))
@@ -137,7 +133,8 @@ class CentralOptimization(object):
 
             # Scale the temp net load
             new_net_load['netload'] *= scaling_factor
-
+            
+        # print('new_net_load',new_net_load)
         return new_net_load
 
     def check_energy_constraints_feasible(self, vehicle, SOC_init, SOC_final, SOC_offset, verbose=False):
@@ -201,10 +198,13 @@ class CentralOptimization(object):
             net_load as a dictionary with time ids, time ids
         """
         temp_index = pandas.DataFrame(range(0, len(net_load)), columns=['index'])
+        
+        # print('net_load in initialize time index:',netload)
         # Set temp_index
         temp_net_load = net_load.copy()
         temp_net_load = temp_net_load.set_index(temp_index['index'])
         # Return a dictionary
+        # print('self.time',temp_index.index.values.tolist())
         return temp_net_load.to_dict()['netload'], temp_index.index.values.tolist()
 
     def get_initial_SOC(self, vehicle, SOC_offset, SOC_init=None):
@@ -223,7 +223,7 @@ class CentralOptimization(object):
         else:
             return vehicle.SOC[self.SOC_index_to] - SOC_offset - SOC_margin
 
-    def initialize_model(self, project, net_load, SOC_margin, SOC_offset, price):
+    def initialize_model(self, project, net_load, SOC_margin, SOC_offset, price,vehCap,iterNumber,real_number_of_vehicle,batteryCost):
         """Select the vehicles that were plugged at controlled chargers and create
         the optimization variables (see inputs of optimization)
 
@@ -231,7 +231,7 @@ class CentralOptimization(object):
             project (Project): project
 
         Return:
-            times, vehicles, d, pmax, pmin, emin, emax, efinal,pr_e,pr_fre_c1,pr_fre_c2
+            times, vehicles, d, pmax, pmin, emin, emax, efinal,pr_e,pr_fre_c1,pr_fre_c2,genCap,regupCap,regdownCap
         """
         # Create a dict with the net load and get time index in a data frame
         self.d, self.times = self.initialize_time_index(net_load)
@@ -239,23 +239,60 @@ class CentralOptimization(object):
         unfeasible_vehicle = 0
         
         temp_price=price.copy()
-        temp_price=temp_price.iloc[0:len(net_load)]
-        temp_price=temp_price.set_index(net_load.index)
-        temp_price=temp_price.resample(str(self.optimization_timestep) + 'T').first()
-        temp_price=temp_price.set_index(pandas.DataFrame(range(0, len(temp_price)), columns=['index']).index)
-        
-
+        temp_price=temp_price.resample(str(self.optimization_timestep) + 'T').first()        
+        temp_price=temp_price.fillna(method='ffill')
+        temp_price=temp_price[:144]
+        # print('temp_price:',temp_price)
+        temp_price.index=self.times
+        print(temp_price)
         # Initialize pr_e 
-        self.pr_e.update(temp_price.to_dict()['pr_e'])
-
+        self.pr_e.update(temp_price['pr_e'])
+        # print('pr_e:',temp_price['pr_e'])
         # Initialize pr_fre_c1 
         self.pr_fre_c1.update(temp_price.to_dict()['pr_fre_u'])
-
         # Initialize pr_fre_c2
         self.pr_fre_c2.update(temp_price.to_dict()['pr_fre_d'])
-
+       
         # # Initialize pr_ba 
-        # self.pr_ba.update()
+        self.pr_batt=batteryCost
+
+        # initialize vehCap
+        temp_vehCap=vehCap.copy()
+        temp_vehCap=temp_vehCap.resample(str(self.optimization_timestep) + 'T').first()        
+        temp_vehCap=temp_vehCap.fillna(method='ffill')
+        temp_vehCap=temp_vehCap[:144]
+        # print('temp_vehCap:',temp_vehCap)
+        temp_vehCap.index=self.times
+
+        if real_number_of_vehicle and iterNumber!=1:
+            # Set scaling factor
+            scaling_factor = len(project.vehicles) / real_number_of_vehicle
+
+            # Scale the temp net load
+            temp_vehCap['gen_capacity_veh'] *= scaling_factor
+            temp_vehCap['regup_capacity_veh'] *= scaling_factor
+            temp_vehCap['regdown_capacity_veh'] *= scaling_factor
+
+        # print('temp_price with times as index:',temp_price)
+        temp_index = pandas.DataFrame(range(0, len(net_load)), columns=['index'])
+        
+        # Initialize vehCap generation
+        self.genCap.update(temp_vehCap.to_dict()['gen_capacity_veh'])
+         # Initialize regup
+        self.regupCap.update(temp_vehCap['regup_capacity_veh'])
+        # print('pr_e:',temp_price['pr_e'])
+        self.regdownCap.update(temp_vehCap['regdown_capacity_veh'])
+        
+
+        # print(iterNumber)
+        if iterNumber==1:
+            with open('project_vehicle.pkl', 'wb') as output:
+                pickle.dump(project.vehicles, output, pickle.HIGHEST_PROTOCOL)
+            # print('project.vehicles pickle created')
+        else:
+            with open('project_vehicle.pkl', 'rb') as inputs:
+                project.vehiclePickle=pickle.load(inputs)
+            project.vehicles=project.vehiclePickle
 
         for vehicle in project.vehicles:
             if vehicle.result is not None:
@@ -302,14 +339,37 @@ class CentralOptimization(object):
                 self.efinal.update({vehicle.id: (temp_vehicle_result.tail(1).energy.values[0] * (project.timestep / (60 * self.optimization_timestep)) +
                                                  (SOC_final - SOC_init) * vehicle.car_model.battery_capacity *
                                                  (60 / self.optimization_timestep))})
+        # w = csv.writer(open("temp_vehicle_result_efinal.csv", "w"))
+        # for key, val in self.efinal.items():   
+        #     w.writerow([key, val])
+        
+        # w = csv.writer(open("temp_vehicle_result_emax.csv", "w"))
+        # for key, val in self.emax.items():   
+        #     w.writerow([key, val])
 
-        print('There is ' + str(vehicle_to_optimize) + ' vehicle participating in the optimization (' +
-              str(vehicle_to_optimize * 100 / len(project.vehicles)) + '%)')
-        print('There is ' + str(unfeasible_vehicle) + ' unfeasible vehicle.')
-        print('')
+        # w = csv.writer(open("temp_vehicle_result_emin.csv", "w"))
+        # for key, val in self.emin.items():   
+        #     w.writerow([key, val])
+
+        # w = csv.writer(open("temp_vehicle_result_SOC.csv", "w"))
+        # for key, val in self.emin.items():   
+        #     w.writerow([key, val])
+
+        # # temp_vehicle_result.to_csv('temp_vehicle_result.csv')
+        # print(SOC_final)
+        # print(SOC_init)
+        # print(project.timestep,self.optimization_timestep,vehicle.car_model.battery_capacity,)
+        # print(temp_vehicle_result.tail(1).energy.values[0])
+        # print(self.efinal)
+        # print('temp_vehicle_result saved')
+
+        # print('There is ' + str(vehicle_to_optimize) + ' vehicle participating in the optimization (' +
+        #       str(vehicle_to_optimize * 100 / len(project.vehicles)) + '%)')
+        # print('There is ' + str(unfeasible_vehicle) + ' unfeasible vehicle.')
+        # print('')
 
     def process(self, times, vehicles, d, pmax, pmin, emin, emax, efinal, 
-                pr_e, pr_fre_c1, pr_fre_c2,  timeindex, re_energy_u,re_energy_d,
+                pr_e, pr_fre_c1, pr_fre_c2, pr_batt,genCap,regupCap,regdownCap, timeindex, re_energy_u,re_energy_d,
                 peak_shaving, penalization, solver="gurobi"): #pr_ba
         """The process function creates the pyomo model and solve it.
         Minimize sum( net_load(t) + sum(power_demand(t, v)))**2
@@ -334,14 +394,16 @@ class CentralOptimization(object):
             model (ConcreteModel), result
         """
 
+        # print(times)
         # Select gurobi solver
         with SolverFactory(solver) as opt:
             # Solver option see Gurobi website
-            # opt.options['Method'] = 1
-
+            # opt.options['TimeLimit'] = 1000 #300
+            
             # Creation of a Concrete Model
             model = ConcreteModel()
 
+            
             # ###### Set
             model.t = Set(initialize=times, doc='Time', ordered=True)
             last_t = model.t.last()
@@ -357,45 +419,45 @@ class CentralOptimization(object):
             model.pr_fre_c2 = Param(model.t, initialize=pr_fre_c2, doc='Regulation down Capacity Price ')
             # model.pr_fre_p1 = Param(model.t, initialize=pr_fre_p, doc='Regulation up Performance Price ')
             # model.pr_fre_p2 = Param(model.t, initialize=pr_fre_p, doc='Regulation down Performance Price ')           
-            # model.pr_ba = Param(model.v, initialize=pr_ba, doc='Battery Price ')
+            model.pr_batt = Param(within=NonNegativeReals, initialize=pr_batt, doc='Battery Price ')
             # model.pr_re_p = Param(model.t, initialize=d, doc='Reservce Capacity Price ')
+
+            #cap
+            model.genCap= Param(model.t, initialize=genCap, doc='gen_capacity_veh')
+            model.regupCap= Param(model.t, initialize=regupCap, doc='gen_capacity_veh')
+            model.regdownCap= Param(model.t, initialize=regdownCap, doc='gen_capacity_veh')
 
             # Power
             model.p_max = Param(model.t, model.v, initialize=pmax, doc='P max')
             model.p_min = Param(model.t, model.v, initialize=pmin, doc='P min')
+            # print(pmin)
 
             # Energy
             model.e_min = Param(model.t, model.v, initialize=emin, doc='E min')
             model.e_max = Param(model.t, model.v, initialize=emax, doc='E max')
 
             model.e_final = Param(model.v, initialize=efinal, doc='final energy balance')
-
+        
             # Time_index
             model.time_index = Param(initialize=1/6, doc='time index conversion to 1 hr')
             
-            # Regulation Energy Ratio* price ratio from capacity to energy
-            model.re_energy_u = Param(initialize=0.25, doc='regulation energy ratio to capacity')
-            model.re_energy_d = Param(initialize=0.2, doc='regulation energy ratio to capacity')
+            # Regulation Energy Ratio* price ratio from capacity market to energy market
+            # model.re_energy_u = Param(initialize=0.25, doc='regulation energy ratio to capacity')
+            # model.re_energy_d = Param(initialize=0.25, doc='regulation energy ratio to capacity')
 
            
             # ###### Variable           
-            model.u1= Var(model.t, model.v,  doc='Power used for energy discharging')
-            model.ub= Var(model.t, model.v,  within=Binary,doc='Power used for energy discharging')
+            model.u1= Var(model.t, model.v,  within=Reals,doc='Power used for energy discharging')
+            model.u1Positive=Var(model.t, model.v,  within=NonNegativeReals,doc='Power used for energy charging')
+            model.u1Negative=Var(model.t, model.v,  within=NonNegativeReals,doc='Power used for energy discharging')
             model.c1= Var(model.t, model.v,  within=NonNegativeReals, doc='Power capacity used for regulation up')
-            model.c2= Var(model.t, model.v,  within=NonNegativeReals,doc='Power capacity u sed for regulation down')
-            model.cb= Var(model.t, model.v,  within=Binary,doc='Power used for energy charging')
-            model.cb2= Var(model.t, model.v, within=Binary,doc='Power used for energy charging')
-
-
+            model.c2= Var(model.t, model.v,  within=NonNegativeReals,doc='Power capacity used for regulation down')
+            model.c1on=Var(model.t, model.v,  within=Binary,doc='Binary vairble to constraint regup or regdown')
             # ###### Rules
             # def power_rule(model, t, v):
             #     return model.u1[t, v]*model.ub[t,v] +model.u2[t, v]*model.ub2[t,v] + model.c1[t,v]*model.cb[t,v] - model.c2[t,v]*model.cb2[t,v]<= model.u[t, v]
             # model.power_rule = Constraint(model.t, model.v, rule=power_rule, doc='P rule')
 
-            def binary_rule(model, t, v):
-                return model.ub[t,v] +model.cb[t,v] +model.cb2[t,v]<= 1
-            model.binary_rule = Constraint(model.t, model.v, rule=binary_rule, doc='Binary rule')
-            
             def maximum_power_rule1(model, t, v):
                 return model.u1[t, v]<= model.p_max[t, v]
             model.power_max_rule1 = Constraint(model.t, model.v, rule=maximum_power_rule1, doc='P max rule')
@@ -405,64 +467,59 @@ class CentralOptimization(object):
             model.power_min_rule1 = Constraint(model.t, model.v, rule=minimum_power_rule1, doc='P min rule')
          
             def maximum_power_rule2(model, t, v):
-                return model.c2[t, v] <= model.p_max[t, v]
+                return model.c2[t, v] <= model.p_max[t, v]*model.c1on[t,v]
             model.power_max_rule2 = Constraint(model.t, model.v, rule=maximum_power_rule2, doc='P max rule')
 
-            def minimum_power_rule2(model, t, v):
-                return model.c2[t, v] >= model.p_min[t, v]
-            model.power_min_rule2 = Constraint(model.t, model.v, rule=minimum_power_rule2, doc='P min rule')
-
             def maximum_power_rule3(model, t, v):
-                return model.c1[t, v] <= model.p_max[t, v]
+                return model.c1[t, v] <= model.p_max[t, v]*(1-model.c1on[t,v])
             model.power_max_rule3 = Constraint(model.t, model.v, rule=maximum_power_rule3, doc='P max rule')
 
-            def minimum_power_rule3(model, t, v):
-                return model.c1[t, v] >= model.p_min[t, v]
-            model.power_min_rule3 = Constraint(model.t, model.v, rule=minimum_power_rule3, doc='P min rule')
-
             def minimum_energy_rule(model, t, v):
-                return sum(model.u1[i, v]*model.ub[i,v] + model.c1[i,v]*model.cb[i,v] - model.c2[i,v]*model.cb2[i,v] for i in range(0, t + 1)) >= model.e_min[t, v]
+                return sum(model.u1[i, v]- model.c1[i,v] + model.c2[i,v] for i in range(0, t + 1)) >= model.e_min[t, v]
             model.minimum_energy_rule = Constraint(model.t, model.v, rule=minimum_energy_rule, doc='E min rule')
 
             def maximum_energy_rule(model, t, v):
-                return sum(model.u1[i, v]*model.ub[i,v] + model.c1[i,v]*model.cb[i,v] - model.c2[i,v]*model.cb2[i,v] for i in range(0, t + 1)) <= model.e_max[t, v]
+                return sum(model.u1[i, v] - model.c1[i,v]+ model.c2[i,v] for i in range(0, t + 1)) <= model.e_max[t, v]
             model.maximum_energy_rule = Constraint(model.t, model.v, rule=maximum_energy_rule, doc='E max rule')
 
             def final_energy_balance(model, v):
-                return sum(model.u1[i, v]*model.ub[i,v] + model.c1[i,v]*model.cb[i,v] - model.c2[i,v]*model.cb2[i,v] for i in model.t) >= model.e_final[v]
+                return sum(model.u1[i, v] - model.c1[i,v]+ model.c2[i,v] for i in model.t) >= model.e_final[v]
             model.final_energy_rule = Constraint(model.v, rule=final_energy_balance, doc='E final rule')
+
+            def generation_capacity(model, t, v):
+                return sum(model.u1[t, v] for v in model.v ) <= model.genCap[t]
+            model.generation_capacity = Constraint(model.t, model.v, rule=generation_capacity, doc='generation Capcity rule')
+            
+            # def regup_capacity(model, t, v):
+            #     return sum(model.c1[t, v] for v in model.v ) <= model.regupCap[t]
+            # model.regup_capacity = Constraint(model.t, model.v, rule=regup_capacity, doc='reg up Capcity rule')
+            
+            def regdown_capacity(model, t, v):
+                return sum(model.c2[t, v] for v in model.v ) <= model.regdownCap[t]
+            model.regdown_capacity = Constraint(model.t, model.v, rule=regdown_capacity, doc='regdown Capcity rule')
+
+            def energy_charge_discharge(model,t,v):
+                return model.u1[t,v]==model.u1Positive[t,v]-model.u1Negative[t,v]
+            model.energy_charge_discharge=Constraint(model.t,model.v,rule=energy_charge_discharge,doc='seperate charge and discharge')
 
             # Set the objective to be either peak shaving or ramp mitigation
             # still have to deal with time step(model.time_index, for example,15/60mins) and battery price
+            
             if peak_shaving == 'economic':
                 def objective_rule(model):
                     return sum( [
-                    -sum([model.u1[t, v]*model.ub[t,v]*model.pr_e[t]*model.time_index for v in model.v])
-                    +sum([model.c1[t, v]*model.cb[t,v]*model.pr_fre_c1[t]*model.time_index for v in model.v])
-                    +sum([model.c2[t, v]*model.cb2[t,v]*model.pr_fre_c2[t]*model.time_index for v in model.v])
-                    +sum([model.c1[t, v]*model.cb[t,v]*model.re_energy_u*model.pr_fre_c1[t]*model.time_index for v in model.v])
-                    +sum([model.c2[t, v]*model.cb2[t,v]*model.re_energy_d*model.pr_fre_c2[t]*model.time_index for v in model.v])
-                    -sum([model.u1[t, v]*model.ub[t,v]*0.1*model.time_index for v in model.v])   
-                    -sum([model.c1[t, v]*model.cb[t,v]*0.1*model.time_index for v in model.v])
-                    -sum([model.c2[t, v]*model.cb2[t,v]*0.1*model.time_index for v in model.v])
+                    -sum([model.u1[t, v]*model.pr_e[t]*model.time_index for v in model.v])# charge cost and discharge revenue, u1 is negative for discharge, positive for charge
+                    +sum([model.c1[t, v]*model.pr_fre_c1[t]*model.time_index for v in model.v]) # regup capacity market revenue
+                    +sum([model.c2[t, v]*model.pr_fre_c2[t]*model.time_index for v in model.v]) # reg down capacity market revenue
+                    # +sum([model.c1[t, v]*model.cb[t,v]*model.re_energy_u*model.pr_fre_c1[t]*model.time_index for v in model.v])  # regup capacity market revenue
+                    # +sum([model.c2[t, v]*model.cb2[t,v]*model.re_energy_d*model.pr_fre_c2[t]*model.time_index for v in model.v]) # reg down capacity market revenue
+                    -sum([(model.u1Positive[t, v]+model.u1Negative[t, v])*model.pr_batt*model.time_index for v in model.v])  # cost of battery degradation in the unit of $/kwh 
+                    # -sum([abs(model.u1[t, v])*model.ub[t,v]*0.1*model.time_index for v in model.v])  # cost of battery degradation in the unit of $/kwh 
+                    -sum([model.c1[t, v]*model.pr_batt*model.time_index for v in model.v])
+                    -sum([model.c2[t, v]*model.pr_batt*model.time_index for v in model.v])
                     for t in model.t] )
-                    #model.pr_ba
+                
                 model.objective = Objective(rule=objective_rule, sense=maximize, doc='Define objective function')
-            
-            # if peak_shaving == 'economic':
-            #     def objective_rule(model):
-            #         return sum( [
-            #         +sum([model.u1[t, v]*model.ub[t,v]*model.pr_e[t]*model.time_index for v in model.v])                    
-            #         +sum([model.c1[t, v]*model.cb[t,v]*(1-model.ub[t,v])*model.pr_fre_c1[t]*model.time_index for v in model.v])
-            #         +sum([model.c2[t, v]*(1-model.cb[t,v])*(1-model.ub[t,v])*model.pr_fre_c2[t]*model.time_index for v in model.v])
-            #         +sum([model.c1[t, v]*model.cb[t,v]*(1-model.ub[t,v])*model.re_energy_u*model.pr_fre_c1[t]*model.time_index for v in model.v])
-            #         +sum([model.c2[t, v]*(1-model.cb[t,v])*(1-model.ub[t,v])*model.re_energy_d*model.pr_fre_c2[t]*model.time_index for v in model.v])
-            #         -sum([model.u1[t, v]*model.ub[t,v]*0.1*model.time_index for v in model.v])                    
-            #         -sum([model.c1[t, v]*model.cb[t,v]*(1-model.ub[t,v])*0.1*model.time_index for v in model.v])
-            #         -sum([model.c2[t, v]*(1-model.cb[t,v])*(1-model.ub[t,v])*0.1*model.time_index for v in model.v])
-            #         for t in model.t] )
-            #         #model.pr_ba
-            #     model.objective = Objective(rule=objective_rule, sense=maximize, doc='Define objective function')
             
             elif peak_shaving == 'peak_shaving':
                 def objective_rule(model):
@@ -479,11 +536,12 @@ class CentralOptimization(object):
                 def objective_rule(model):
                     return sum([(model.d[t + 1] - model.d[t] + sum([model.u[t + 1, v] - model.u[t, v] for v in model.v]))**2 for t in model.t if t != last_t])
                 model.objective = Objective(rule=objective_rule, sense=minimize, doc='Define objective function')
-
-            results = opt.solve(model,tee=True, keepfiles=True)
+            
+            # opt.options['max_iter'] = 10
+            results = opt.solve(model,tee=True)#tee=True, keepfiles=True
             # results.write()
 
-        return model, results
+        return model,results
 
     def plot_result(self, model):
         """Create a plot showing the power constraints, the energy constraints and the ramp
@@ -513,24 +571,19 @@ class CentralOptimization(object):
         df = pandas.DataFrame(index=['power charged'], data=charge).groupby(level=0).sum()
         powerresult = pandas.concat([powerresult, df], axis=1)
 
-        df = pandas.DataFrame(index=['power discharged binary'], data=model.ub.get_values()).transpose().groupby(level=0).sum()
-        powerresult = pandas.concat([powerresult, df], axis=1)
+       
        
         df = pandas.DataFrame(index=['power regulation up'], data=model.c1.get_values()).transpose().groupby(level=0).sum()
-        powerresult = pandas.concat([powerresult, df], axis=1)
-        df = pandas.DataFrame(index=['power regulation up binary'], data=model.cb.get_values()).transpose().groupby(level=0).sum()
         powerresult = pandas.concat([powerresult, df], axis=1)
         
         df = pandas.DataFrame(index=['power regulation down'], data=model.c2.get_values()).transpose().groupby(level=0).sum()
         powerresult = pandas.concat([powerresult, df], axis=1)
-        df = pandas.DataFrame(index=['power regulation down binary'], data=model.cb2.get_values()).transpose().groupby(level=0).sum()
-        powerresult = pandas.concat([powerresult, df], axis=1)
-
+        
         for i in range(len(df)):           
-            dischar[i]=powerresult[i]['power discharged']*powerresult[i]['power discharged binary']
-            char[i]=-powerresult[i]['power charged']*powerresult[i]['power discharged binary']
-            regup[i]=powerresult[i]['power regulation up']*powerresult[i]['power regulation up binary']            
-            regdown[i]=powerresult[i]['power regulation down']*powerresult[i]['power regulation down binary']
+            dischar[i]=powerresult[i]['power discharged']
+            char[i]=-powerresult[i]['power charged']
+            regup[i]=powerresult[i]['power regulation up']        
+            regdown[i]=powerresult[i]['power regulation down']
             powersum[i]=dischar[i]+char[i]+regup[i]+regdown[i]
             powerresult.append((dischar[i],char[i],regup[i],regdown[i],powersum[i]))
         
@@ -615,8 +668,9 @@ class CentralOptimization(object):
         if plot:
             self.plot_result(model)
 
-        temp = pandas.DataFrame()
+        temp = pandas.DataFrame() 
         first = True
+
         for vehicle in project.vehicles:
             if vehicle.result is not None:
                 if first:
@@ -625,114 +679,40 @@ class CentralOptimization(object):
                 else:
                     temp['vehicle_before'] += vehicle.result['power_demand']
 
-        temp2 = pandas.DataFrame(index=['vehicle_after'], data=model.u1.get_values()).transpose().groupby(level=0).sum()
-        i = pandas.date_range(start=self.date_from, end=self.date_to,
-                              freq=str(self.optimization_timestep) + 'T', closed='left')
-        temp2 = temp2.set_index(i)
-        temp2 = temp2.resample(str(project.timestep) + 'S')
-        temp2 = temp2.fillna(method='ffill').fillna(method='bfill')
-
-        final_result = pandas.DataFrame()
-        final_result = pandas.concat([temp['vehicle_before'], temp2['vehicle_after']], axis=1)
-        final_result = final_result.fillna(method='ffill').fillna(method='bfill')
-
-        return final_result
-
-        # if plot:
-        #     self.plot_result(model)
-
-        # temp = pandas.DataFrame() 
-        # first = True
-
-        # power=pandas.DataFrame()
+        # pd.DataFrame.from_dict(data=u1)
+        u1 = model.u1.get_values()
+        c1 = model.c1.get_values()
+        c2=model.c2.get_values()
         
-        # discharge = pandas.DataFrame()
-        # charge = pandas.DataFrame()
+        p1=pandas.DataFrame(index=['energy'], data=u1).transpose()
 
-        # # Get the result
+        p1_discharge=-p1[p1['energy']<0]
+        p1_charge=p1[p1['energy']>0]
+        p1_discharge=p1_discharge.reindex(p1.index,fill_value=0)
+        p1_discharge=p1_discharge.rename(columns={'energy':'discharge'})
+        p1_charge=p1_charge.reindex(p1.index,fill_value=0)
+        p1_charge=p1_charge.rename(columns={'energy':'charge'})
 
-        # df = pandas.DataFrame(index=['power'], data=model.u1.get_values()).transpose()
-
-        # for i in range(len(df)):
-        #     if df.iloc[[i],[0]].values[0][0]>=0:
-        #         discharge=pandas.concat([discharge,df.iloc[[i],[0]]],axis=0)
-        #     else:
-        #         charge=pandas.concat([charge,-df.iloc[[i],[0]]],axis=0) 
-
-        # df = pandas.DataFrame(index=['power discharged'], data=discharge.transpose().get_values()).transpose().groupby(level=0).sum()
-        # power = pandas.concat([power, df], axis=1)
-
-        # df = pandas.DataFrame(index=['power charged'], data=charge.transpose().get_values()).transpose().groupby(level=0).sum()
-        # power = pandas.concat([power, df], axis=1)
-
-        # df = pandas.DataFrame(index=['power discharged binary'], data=model.ub.get_values()).transpose().groupby(level=0).sum()
-        # power = pandas.concat([power, df], axis=1)
-       
-        # df = pandas.DataFrame(index=['power regulation up'], data=model.c1.get_values()).transpose().groupby(level=0).sum()
-        # power = pandas.concat([power, df], axis=1)
-        # df = pandas.DataFrame(index=['power regulation up binary'], data=model.cb.get_values()).transpose().groupby(level=0).sum()
-        # power = pandas.concat([power, df], axis=1)
+        p2=pandas.DataFrame(index=['regup'], data=c1).transpose()
         
-        # df = pandas.DataFrame(index=['power regulation down'], data=model.c2.get_values()).transpose().groupby(level=0).sum()
-        # power = pandas.concat([power, df], axis=1)
-        # df = pandas.DataFrame(index=['power regulation down binary'], data=model.cb2.get_values()).transpose().groupby(level=0).sum()
-        # power = pandas.concat([power, df], axis=1)
-
+        p3=pandas.DataFrame(index=['regdown'], data=c2).transpose()
         
-        # powerresult =[]
 
-        # dischar=[]
-        # char=[]
-        # regup=[]
-        # regdown=[]
-        # powersum=[]
-
-        # for i in range(len(df)):           
-        #     dischar.append(power.loc[[i],'power discharged']*power.loc[[i],'power discharged binary'])
-        #     char.append(power.loc[[i],'power charged']*power.loc[[i],'power discharged binary'])
-        #     regup.append(power.loc[[i],'power regulation up']*power.loc[[i],'power regulation up binary'])
-        #     regdown.append(power.loc[[i],'power regulation down']*power.loc[[i],'power regulation down binary'])
-        #     powersum.append(dischar[i]-char[i])
-        #     powerresult.append((dischar[i],char[i],regup[i],regdown[i],powersum[i]))
-        
-        # powerresult_pd=pandas.DataFrame(powerresult,columns=('Discharge','Charge','Regup','Regdown','EnergySum'))
-        
-        
-        # for vehicle in project.vehicles:
-        #     if vehicle.result is not None:
-        #         if first:
-        #             temp['vehicle_before'] = vehicle.result['power_demand']
-        #             first = False
-        #         else:
-        #             temp['vehicle_before'] += vehicle.result['power_demand']
-
-        # temp2 = pandas.DataFrame(index=['vehicle_after'], data=powerresult_pd['EnergySum'])
-        # i = pandas.date_range(start=self.date_from, end=self.date_to,
-        #                       freq=str(self.optimization_timestep) + 'T', closed='left')
-
-        # temp2 = temp2.set_index(i)
-        # temp2 = temp2.resample(str(project.timestep) + 'S')
-        # temp2 = temp2.fillna(method='ffill').fillna(method='bfill')
-
-        # temp3 = pandas.DataFrame(index=['vehicle_after_demand'], data=powerresult_pd['Charge'])
-        # i = pandas.date_range(start=self.date_from, end=self.date_to,
-        #                       freq=str(self.optimization_timestep) + 'T', closed='left')
-        # temp3 = temp3.set_index(i)
-        # temp3 = temp3.resample(str(project.timestep) + 'S')
-        # temp3 = temp3.fillna(method='ffill').fillna(method='bfill')
-
-        # temp4 = pandas.DataFrame(index=['vehicle_after_generation'], data=powerresult_pd['Discharge'])
-        # i = pandas.date_range(start=self.date_from, end=self.date_to,
-        #                       freq=str(self.optimization_timestep) + 'T', closed='left')
-        # temp4 = temp4.set_index(i)
-        # temp4 = temp4.resample(str(project.timestep) + 'S')
-        # temp4 = temp4.fillna(method='ffill').fillna(method='bfill')
-
+        result_pd=pandas.concat([p1_charge,p1_discharge,p2,p3],axis=1)
+        result_pd['EnergyDemand']=result_pd['charge']
+        result_pd['EnergyGeneration']=result_pd['discharge']
+        result_pd['Regup']=result_pd['regup']
+        result_pd['Regdown']=result_pd['regdown']
+        # print(result_pd)
+        result_pd=result_pd.drop(['discharge','charge','regup','regdown'],axis=1).groupby(level=0).sum()
+        i = pandas.date_range(start=self.date_from, end=self.date_to,freq=str(self.optimization_timestep) + 'T', closed='left')
+        # result_pd=result_pd.set_index(i).resample(str(project.timestep) + 'S').fillna(method='ffill').fillna(method='bfill')
+      
         # final_result = pandas.DataFrame()
-        # final_result = pandas.concat([temp['vehicle_before'], temp2['vehicle_after']],temp3['vehicle_after_demand'],temp4['vehicle_after_generatio'],axis=1)
+        # final_result = pandas.concat([temp['vehicle_before'], temp2['vehicle_after']],temp3['regdown_capacity_veh'],temp4['regup_capacity_veh'],axis=1)#temp3['vehicle_after_demand'],temp4['vehicle_after_generation'],
         # final_result = final_result.fillna(method='ffill').fillna(method='bfill')
-
-        # return final_result
+    
+        return result_pd
 
 
 def save_vehicle_state_for_optimization(vehicle, timestep, date_from,
@@ -811,3 +791,5 @@ def save_vehicle_state_for_optimization(vehicle, timestep, date_from,
                                   freq=str(timestep) + 's', closed='left')
             vehicle.result = pandas.DataFrame(index=i, data=vehicle.result)
             vehicle.result['energy'] = vehicle.result['energy'].cumsum()
+
+
