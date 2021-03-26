@@ -14,8 +14,9 @@ import numpy as np
 
 ######====== write data.dat file ======########
 # data.dat file is the data files for loading data into optimization model with pyomo
-def writeDatFile(df_gen,df_solar_cap,df_solar_cons,df_wind_cap,df_wind_cons,df_veh_cap,df_load,df_hydro,SimDays,SimHours,HorizonHours,regup_margin,regdown_margin,data_name,batteryCost):
-    with open(''+str(data_name)+'.dat', 'w') as f:
+def writeDatFile(df_gen,df_solar_cap,df_solar_cons,df_wind_cap,df_wind_cons,df_veh_cap,df_load,df_hydro,SimDays,SimHours,HorizonHours,regup_margin,regdown_margin,data_name,batteryCost,path,cap):
+     
+    with open(path+"/"+str(data_name)+'.dat', 'w') as f:
     # generators set  
         f.write('set Generators :=\n')
         for gen in range(0,len(df_gen)):
@@ -59,6 +60,8 @@ def writeDatFile(df_gen,df_solar_cap,df_solar_cons,df_wind_cap,df_wind_cons,df_v
         f.write('param regup_margin := %0.3f;' % regup_margin)
         f.write('\n\n')
         f.write('param regdown_margin := %0.3f;' % regdown_margin)
+        f.write('\n\n')
+        f.write('param cap := %0.3f;' % cap)
         f.write('\n\n')
 
     ####### vehicle battery 
@@ -206,7 +209,7 @@ model.HorizonDemand = Param(model.hh_periods,within=NonNegativeReals,initialize=
 ### Minimum reserve as a percent of total demand 
 model.regup_margin= Param(within=NonNegativeReals)
 model.regdown_margin= Param(within=NonNegativeReals) 
-
+model.cap=Param(within=NonNegativeReals) 
 
 ##Initial conditions
 model.ini_on = Param(model.Generators, within=Binary, initialize=0,mutable=True)  
@@ -523,20 +526,29 @@ def RegulationUp(model,i):
     return sum(model.regup[j,i] for j in model.Generators)+model.regup_veh[i]  >= model.regup_margin * model.HorizonDemand[i] 
 model.RegulationUp = Constraint(model.hh_periods,rule=RegulationUp)           
 
+# add two caps for vehicle, regup and regdown.
+def RegulationUp2(model,i):
+    return model.regup_veh[i]  <= model.regup_margin * model.HorizonDemand[i]*model.cap
+model.RegulationUp2 = Constraint(model.hh_periods,rule=RegulationUp2)   
+
 ##Regulation up reserve can only be offered by units that are online
-def RegulationUp2(model,j,i):
+def RegulationUp3(model,j,i):
     return model.regup[j,i] <= model.on[j,i]*model.maxcap[j]-model.mwh[j,i] 
-model.RegulationUp2= Constraint(model.Generators,model.hh_periods,rule=RegulationUp2) 
+model.RegulationUp3= Constraint(model.Generators,model.hh_periods,rule=RegulationUp3) 
 
 ##Regulation down Reserve Requirement
 def RegulationDown(model,i):
     return sum(model.regdown[j,i] for j in model.Generators)+model.regdown_veh[i]>= model.regdown_margin * model.HorizonDemand[i] 
 model.RegulationDown = Constraint(model.hh_periods,rule=RegulationDown)  
 
+def RegulationDown2(model,i):
+    return model.regdown_veh[i]  <= model.regdown_margin * model.HorizonDemand[i]*model.cap
+model.RegulationDown2 = Constraint(model.hh_periods,rule=RegulationDown2) 
+
 ##Regulation up reserve can only be offered by units that are online
-def RegulationDown2(model,j,i):
+def RegulationDown3(model,j,i):
     return model.regdown[j,i] <= model.mwh[j,i]- model.on[j,i]*model.mincap[j] 
-model.RegulationDown2= Constraint(model.Generators,model.hh_periods,rule=RegulationDown2) 
+model.RegulationDown3= Constraint(model.Generators,model.hh_periods,rule=RegulationDown3) 
 
 ######========== Zero Sum Constraint =========#############
 # for each generator, total energy for energy market and capacity market can not exceed the maximum capacity
@@ -547,6 +559,7 @@ model.ZeroSumConstraint=Constraint(model.Generators,model.hh_periods,rule=ZeroSu
 def readSolutionResult(opt,instance,K,myresult,df_gen,df_solar_cons,df_wind_cons,df_hydro,df_load,veh_batteryCost):
  ## Store result
     # Space to store results
+    on=[]
     mwh=[]
     regup=[]
     regdown=[]
@@ -575,7 +588,13 @@ def readSolutionResult(opt,instance,K,myresult,df_gen,df_solar_cons,df_wind_cons
     for v in instance.component_objects(Var, active=True):
         varobject = getattr(instance, str(v))
         a=str(v)
-    
+
+        if a=='on':
+            for index in varobject:
+                if int(index[1]>0 and index[1]<26):
+                    on.append((index[0], date,index[1]+((date-1)*24),varobject[index].value))
+                    # print ("Generator", index, v[index].value)   
+
         if a=='mwh':
             for index in varobject:
                 if int(index[1]>0 and index[1]<26):
@@ -662,6 +681,8 @@ def readSolutionResult(opt,instance,K,myresult,df_gen,df_solar_cons,df_wind_cons
     regup_pd=pd.DataFrame(regup,columns=('Generator','Day','Hour','Value'))
     regdown_pd=pd.DataFrame(regdown,columns=('Generator','Day','Hour','Value'))  
     mwh_pd=pd.DataFrame(mwh,columns=('Generator','Day','Hour','Generation'))
+    on_pd=pd.DataFrame(on,columns=('Generator','Day','Hour','On'))
+
     mwh_pd['Reg Up']=regup_pd['Value']
     mwh_pd['Reg Down']=regdown_pd['Value']
 
@@ -754,4 +775,4 @@ def readSolutionResult(opt,instance,K,myresult,df_gen,df_solar_cons,df_wind_cons
     mwh_pd_gr=pd.concat([mwh_pd_gr,price_pd],axis=1,sort=False)
     # print(mwh_pd_gr)
     # print("complete")
-    return price_pd, mwh_veh_pd,mwh_pd#,,cost_pd
+    return price_pd, mwh_veh_pd,mwh_pd,on_pd#,,cost_pd

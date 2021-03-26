@@ -26,3 +26,4 @@ __all__ = ['v2gsim.itinerary', 'v2gsim.core', 'v2gsim.model', 'v2gsim.tool', 'v2
            'v2gsim.driving.basic_powertrain', 'v2gsim.driving.drivecycle.generator',
            'v2gsim.driving.detailed.power_train', 'v2gsim.driving.detailed.init_model',
            'v2gsim.post_simulation.result', 'v2gsim.battery_degradation.BatteryDegradation']
+# print('init_v2gsim')
